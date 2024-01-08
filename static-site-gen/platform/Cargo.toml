@@ -19,8 +19,8 @@ path = "src/main.rs"
 [dependencies]
 libc = "0.2"
 syntect = "5.0"
-roc_highlight = { path = "../../../crates/highlight" }
-roc_std = { path = "../../../crates/roc_std" }
+# roc_highlight = { path = "../../../roc/crates/highlight" }
+roc_std = { git = "https://github.com/roc-lang/roc", rev = "7b1f2d2ac1f6e0b7a283cfbe932318f37a0a6861" }
 
 
 # Default features include building a binary that we don't need
