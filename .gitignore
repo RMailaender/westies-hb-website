@@ -3,3 +3,5 @@ static-site-gen/output/subFolder
 static-site-gen/static-site
 static-site-gen/bin
 static-site-gen/platform/target
+
+roc-server/server
