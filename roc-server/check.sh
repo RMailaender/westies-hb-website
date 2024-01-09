@@ -1,0 +1,1 @@
+roc check ./src/server.roc
