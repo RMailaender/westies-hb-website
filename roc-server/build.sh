@@ -1,3 +1,1 @@
-roc build ./src/server.roc --output roc-out/dev/server
-
-./roc-out/dev/server
+roc build ./src/server.roc --linker legacy --output ./roc-out/dev/server

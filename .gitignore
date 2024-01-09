@@ -8,3 +8,5 @@ roc-server/server
 roc-server/roc-out
 
 roc-server/.env
+roc-server/setenv.sh
+test.db

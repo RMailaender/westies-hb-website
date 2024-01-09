@@ -145,7 +145,7 @@ handleRequest = \req ->
 
     # {} <- Stdout.line "\(date) \(Http.methodToStr req.method) \(req.url)" |> Task.await
 
-    eventList = Html.ul [] (events |> List.map \{ name, location } -> Html.li [] [Html.text "\(name) at \(location)"])
+    eventList = Html.ul [] (events |> List.map \{ title, location } -> Html.li [] [Html.text "\(title) at \(location)"])
 
     res =
         Html.html [] [
@@ -162,11 +162,13 @@ handleRequest = \req ->
         Body _ -> Task.ok { status: 200, headers: [], body: Str.toUtf8 res }
 
 Event : {
-    name : Str,
+    slug : Str,
+    title : Str,
     location : Str,
+    description : Str,
+    start : U128,
 }
 
 decodeEvent : List U8 -> Result (List Event) _
 decodeEvent = \str -> str
     |> Decode.fromBytes json
-
