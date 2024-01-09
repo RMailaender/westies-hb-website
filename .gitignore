@@ -6,3 +6,5 @@ static-site-gen/platform/target
 
 roc-server/server
 roc-server/roc-out
+
+roc-server/.env
