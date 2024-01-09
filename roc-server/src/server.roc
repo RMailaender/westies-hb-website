@@ -150,23 +150,23 @@ handleRequest = \req ->
     res =
         Html.html [] [
             Html.body [] [
-                Html.h1 [] [Html.text "Epic Hacking Website"],
+                Html.h1 [] [Html.text "Westies HB"],
                 Html.div [] [eventList],
             ],
         ]
         |> Html.render
 
     # Respond with request body
-    when req.body is
-        EmptyBody -> Task.ok { status: 200, headers: [], body: Str.toUtf8 "hello there" }
-        Body _ -> Task.ok { status: 200, headers: [], body: Str.toUtf8 res }
+    Task.ok { status: 200, headers: [], body: Str.toUtf8 res }
 
 Event : {
+    id : I32,
     slug : Str,
     title : Str,
     location : Str,
     description : Str,
-    start : U128,
+    startsAt : U128,
+    endsAt : U128,
 }
 
 decodeEvent : List U8 -> Result (List Event) _
