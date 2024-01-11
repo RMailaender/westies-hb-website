@@ -10,3 +10,6 @@ roc-server/roc-out
 roc-server/.env
 roc-server/setenv.sh
 test.db
+data.db
+
+.DS_Store
