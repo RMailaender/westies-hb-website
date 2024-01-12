@@ -11,8 +11,6 @@ app "westies-hb-server"
         pf.Http.{ Request, Response },
         pf.Utc,
         pf.Env,
-        pf.File.{ ReadErr },
-        pf.Path,
         pf.Url,
         pf.Command,
         html.Html,
@@ -52,84 +50,148 @@ app "westies-hb-server"
 main : Request -> Task Response []
 main = \req ->
     startTime <- Utc.now |> Task.await
+    {} <- Stdout.line "\(Utc.toIso8601Str startTime) \(Http.methodToStr req.method) \(req.url)" |> Task.await
 
     maybeDbPath <- Env.var "DB_PATH" |> Task.attempt
 
-    when req.url |> Url.fromStr |> Url.path |> Str.split "/" is
-        ["", ""] -> routeIndex maybeDbPath req
-        ["", "events"] -> textResponse 200 "events" # renderEvent
-        _ -> textResponse 200 "stuff" # renderNotFound
+    handlerResponse =
+        when req.url |> Url.fromStr |> Url.path |> Str.split "/" is
+            ["", ""] -> routeIndex maybeDbPath req
+            ["", "events"] -> Task.ok (TextResponse "events" OK) # renderEvent
+            _ -> Task.err UnknownRoute # renderNotFound
 
-routeIndex: Result Str [VarNotFound], Request -> Task Response []
+    handlerResponse
+    |> Task.onErr handleServerError
+    |> Task.map toResponse
+
+ServerError : [
+    DBError Str,
+    DecodeError (List U8),
+    UnknownRoute,
+]
+
+Status : [
+    # 2xx success
+    OK,
+
+    # 4xx client errors
+    BadRequest,
+    Unauthorized,
+    Forbidden,
+    NotFound,
+
+    # 5xx server errors
+    InternalServerError,
+]
+
+statusToU16 : Status -> U16
+statusToU16 = \code ->
+    when code is
+        OK -> 200
+        BadRequest -> 400
+        Unauthorized -> 401
+        Forbidden -> 403
+        NotFound -> 404
+        InternalServerError -> 500
+
+ServerResponse : [
+    HtmlResponse Html.Node Status,
+    TextResponse Str Status,
+    JsonResponse (List U8) Status,
+]
+
+HandlerResult : Task ServerResponse ServerError
+
+toResponse : ServerResponse -> Response
+toResponse = \result ->
+    when result is
+        HtmlResponse body s ->
+            body
+            |> Html.render
+            |> Str.toUtf8
+            |> byteResponse (statusToU16 s)
+
+        TextResponse body s ->
+            textResponse body (statusToU16 s)
+
+        JsonResponse body s ->
+            jsonResponse body (statusToU16 s)
+
+handleServerError : ServerError -> Task ServerResponse []
+handleServerError = \error ->
+    errPage = \errTitle, errTxt, status ->
+        Html.html [] [
+            Html.body [] [
+                Html.h1 [] [Html.text "Westies HB - ERROR"],
+                Html.div [] [
+                    Html.h2 [] [Html.text errTitle],
+                    Html.p [] [Html.text errTxt],
+                ],
+            ],
+        ]
+        |> HtmlResponse status
+        |> Task.ok
+
+    when error is
+        DBError dbPath ->
+            {} <- Stderr.line "DB Error: \(dbPath)" |> Task.await
+            errPage "DB Error" "Could not access DB." InternalServerError
+
+        DecodeError bytes ->
+            jsonStr =
+                (Str.fromUtf8 bytes)
+                |> Result.withDefault "UTF8 error"
+            {} <- Stderr.line "Decode Error:\n\(jsonStr)" |> Task.await
+            errPage "Decode Error" "Could not decode events from DB." InternalServerError
+
+        UnknownRoute ->
+            {} <- Stderr.line "UnknownRoute" |> Task.await
+            errPage "404" "UnknownRoute" NotFound
+
+routeIndex : Result Str [VarNotFound], Request -> HandlerResult
 routeIndex = \maybeDbPath, req ->
     when (maybeDbPath, req.method) is
-        (Ok dbPath, Get) -> 
+        (Ok dbPath, Get) ->
             dbPath
-            |> renderIndex 
-            |> Task.attempt \result -> 
-                when result is
-                    Ok res -> byteResponse 200 res
+            |> renderEventsList
 
-                    Err (DBError dbErr) -> 
-                        {} <- Stderr.line "DB Error: \(dbErr.dbPath)" |> Task.await
-                        textResponse 500 "smth bad happened"
+        # |> Task.onErr handleServerError
+        # |> Task.map toResponse
+        _ -> Task.err UnknownRoute
 
-                    Err (DecodeError bytes) -> 
-                        {} <- Stderr.line "DecodeError: " |> Task.await
-                        byteResponse 500 ( (Str.toUtf8 "DecodeError: ") |> List.concat bytes )
-
-                    
-
-        _ -> textResponse 500 "i dunno"
-    
-    
-    # res =
-    #     Html.html [] [
-    #         Html.body [] [
-    #             Html.h1 [] [Html.text "Westies HB"],
-    #         ],
-    #     ]
-    #     |> Html.render
-
-    # byteResponse 200 (Str.toUtf8 res)
-
-renderIndex : Str -> Task (List U8) [DBError { dbPath : Str }, DecodeError (List U8)]
-renderIndex = \dbPath -> 
-    events <- 
+renderEventsList : Str -> HandlerResult
+renderEventsList = \dbPath ->
+    events <-
         Command.new "sqlite3"
         |> Command.arg dbPath
         |> Command.arg ".mode json"
         |> Command.arg "SELECT id, slug, title, location, description, startsAt, endsAt from events;"
         |> Command.output
-        |> Task.await \output -> 
+        |> Task.await \output ->
             when output.status is
-                Ok {} -> Task.ok output.stdout  
+                Ok {} -> Task.ok output.stdout
+                Err _ -> Task.err (DBError dbPath)
+        |> Task.await
+            (\bytes ->
+                when bytes |> decodeEvent is
+                    Ok decoded ->
+                        Task.ok decoded
 
-                Err _ -> Task.err (DBError {dbPath : dbPath } )
-
-        |> Task.await (\bytes -> 
-            when bytes |> decodeEvent is  
-                Ok decoded -> 
-                    Task.ok decoded
-        
-                Err _ -> 
-                    Task.err (DecodeError bytes)
-        )
+                    Err _ ->
+                        Task.err (DecodeError bytes)
+            )
         |> Task.await
 
     eventList = Html.ul [] (events |> List.map \{ title, location } -> Html.li [] [Html.text "\(title) at \(location)"])
 
-    res =
-        Html.html [] [
-            Html.body [] [
-                Html.h1 [] [Html.text "Westies HB"],
-                eventList
-            ],
-        ]
-        |> Html.render
-        |> Str.toUtf8
-
-    Task.ok res
+    Html.html [] [
+        Html.body [] [
+            Html.h1 [] [Html.text "Westies HB"],
+            eventList,
+        ],
+    ]
+    |> HtmlResponse OK
+    |> Task.ok
 
 Event : {
     id : I32,
@@ -145,112 +207,30 @@ decodeEvent : List U8 -> Result (List Event) _
 decodeEvent = \str -> str
     |> Decode.fromBytes json
 
-jsonResponse : List U8 -> Task Response []
-jsonResponse = \bytes ->
-    Task.ok {
-        status: 200,
-        headers: [
-            { name: "Content-Type", value: Str.toUtf8 "application/json; charset=utf-8" },
-        ],
-        body: bytes,
-    }
+jsonResponse : List U8, U16 -> Response
+jsonResponse = \bytes, status -> {
+    status,
+    headers: [
+        { name: "Content-Type", value: Str.toUtf8 "application/json; charset=utf-8" },
+    ],
+    body: bytes,
+}
 
-textResponse : U16, Str -> Task Response []
-textResponse = \status, str ->
-    Task.ok {
-        status,
-        headers: [
-            { name: "Content-Type", value: Str.toUtf8 "text/html; charset=utf-8" },
-        ],
-        body: Str.toUtf8 str,
-    }
+textResponse : Str, U16 -> Response
+textResponse = \str, status -> {
+    status,
+    headers: [
+        { name: "Content-Type", value: Str.toUtf8 "text/html; charset=utf-8" },
+    ],
+    body: Str.toUtf8 str,
+}
 
-byteResponse : U16, List U8 -> Task Response []
-byteResponse = \status, bytes ->
-    Task.ok {
-        status,
-        headers: [
-            { name: "Content-Type", value: Str.toUtf8 "text/html; charset=utf-8" },
-        ],
-        body: bytes,
-    }
-
-# result <- handleRequest req |> Task.attempt
-
-# endTime <- Utc.now |> Task.await
-
-# dt = Utc.deltaAsMillis startTime endTime
-
-# when result is
-#     Ok res ->
-#         {} <- Stdout.line
-#                 "SUCCESS \t\(Num.toStr dt) ms \t\(Utc.toIso8601Str startTime) \(Http.methodToStr req.method) \(req.url)"
-#             |> Task.await
-#         Task.ok res
-
-#     Err err ->
-#         errStr =
-#             when err is
-#                 JsonFileReadErr path _ ->
-#                     "JsonFileReadErr \(Path.display path)"
-
-#                 JsonDecodeError ->
-#                     "JsonDecodeError"
-
-#                 EnvMissingError var ->
-#                     "Env missing '\(var)'"
-
-#         {} <- Stderr.line
-#                 "ERROR \t\(Num.toStr dt)ms \t\(Utc.toIso8601Str startTime) \(Http.methodToStr req.method) \(req.url)\n |> \(errStr)"
-#             |> Task.await
-#         Task.ok { status: 500, headers: [], body: Str.toUtf8 "some error dude" }
-
-#  remove data.json stuff
-# readJson : Path.Path, (List U8 -> Result val err) -> Task val [JsonFileReadErr Path.Path ReadErr, JsonDecodeError]
-# readJson = \jsonPath, decode ->
-#     maybeBytes <- (File.readBytes jsonPath) |> Task.attempt
-#     when maybeBytes is
-#         Ok bytes ->
-#             when decode bytes is
-#                 Ok data ->
-#                     Task.ok data
-
-#                 Err _ ->
-#                     Task.err (JsonDecodeError)
-
-#         Err (FileReadErr path readErr) ->
-#             Task.err (JsonFileReadErr path readErr)
-
-# handleRequest : Request -> Task Response [EnvMissingError Str, JsonFileReadErr Path.Path ReadErr, JsonDecodeError]
-# handleRequest = \req ->
-#     # date <- Utc.now |> Task.map Utc.toIso8601Str |> Task.await
-#     # {} <- Stdout.line "\(date) \(Http.methodToStr req.method) \(req.url)" |> Task.await
-
-#     #  remove data.json stuff
-#     events <-
-#         Env.var "DATA"
-#         |> Task.attempt \maybeVar ->
-#             when maybeVar is
-#                 Ok var if !(Str.isEmpty var) -> Task.ok var
-#                 _ -> Task.err (EnvMissingError "DATA")
-#         |> Task.await \dataPath -> readJson (Path.fromStr dataPath) decodeEvent
-#         |> Task.await
-
-#     # {} <- Stdout.line "\(date) \(Http.methodToStr req.method) \(req.url)" |> Task.await
-
-#     eventList = Html.ul [] (events |> List.map \{ title, location } -> Html.li [] [Html.text "\(title) at \(location)"])
-
-#     res =
-#         Html.html [] [
-#             Html.body [] [
-#                 Html.h1 [] [Html.text "Westies HB"],
-#                 Html.div [] [eventList],
-#             ],
-#         ]
-#         |> Html.render
-
-#     # Respond with request body
-#     Task.ok { status: 200, headers: [], body: Str.toUtf8 res }
-
-
+byteResponse : List U8, U16 -> Response
+byteResponse = \bytes, status -> {
+    status,
+    headers: [
+        { name: "Content-Type", value: Str.toUtf8 "text/html; charset=utf-8" },
+    ],
+    body: bytes,
+}
 
