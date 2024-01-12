@@ -49,25 +49,110 @@ app "westies-hb-server"
 
 main : Request -> Task Response []
 main = \req ->
-    startTime <- Utc.now |> Task.await
-    {} <- Stdout.line "\(Utc.toIso8601Str startTime) \(Http.methodToStr req.method) \(req.url)" |> Task.await
+    info <- Utc.now |> Task.map (\startTime -> @RequestInfo { req, startTime }) |> Task.await
+    {} <- Stdout.line "\(displayStartTime info) \(Http.methodToStr req.method) \(req.url)" |> Task.await
 
     maybeDbPath <- Env.var "DB_PATH" |> Task.attempt
 
     handlerResponse =
         when req.url |> Url.fromStr |> Url.path |> Str.split "/" is
-            ["", ""] -> routeIndex maybeDbPath req
+            ["", ""] -> routeIndex maybeDbPath info
             ["", "events"] -> Task.ok (TextResponse "events" OK) # renderEvent
-            _ -> Task.err UnknownRoute # renderNotFound
+            _ -> Task.err (UnknownRoute info) # renderNotFound
 
     handlerResponse
     |> Task.onErr handleServerError
     |> Task.map toResponse
 
+# =================================================
+#   - Index && EventList
+# =================================================
+routeIndex : Result Str [VarNotFound], RequestInfo -> HandlerResult
+routeIndex = \maybeDbPath, info ->
+    when (maybeDbPath, method info) is
+        (Ok dbPath, Get) ->
+            renderEventsList dbPath info
+
+        _ -> Task.err (UnknownRoute info)
+
+renderEventsList : Str, RequestInfo -> HandlerResult
+renderEventsList = \dbPath, info ->
+    events <-
+        Command.new "sqlite3"
+        |> Command.arg dbPath
+        |> Command.arg ".mode json"
+        |> Command.arg "SELECT id, slug, title, location, description, startsAt, endsAt from events;"
+        |> Command.output
+        |> Task.await \output ->
+            when output.status is
+                Ok {} -> Task.ok output.stdout
+                Err _ -> Task.err (DBError dbPath info)
+        |> Task.await
+            (\bytes ->
+                when bytes |> decodeEvent is
+                    Ok decoded ->
+                        Task.ok decoded
+
+                    Err _ ->
+                        Task.err (DecodeError bytes info)
+            )
+        |> Task.await
+
+    eventList = Html.ul [] (events |> List.map \{ title, location } -> Html.li [] [Html.text "\(title) at \(location)"])
+
+    Html.html [] [
+        Html.body [] [
+            Html.h1 [] [Html.text "Westies HB"],
+            eventList,
+        ],
+    ]
+    |> HtmlResponse OK
+    |> Task.ok
+
+# =================================================
+#   - Event Type
+# =================================================
+
+Event : {
+    id : I32,
+    slug : Str,
+    title : Str,
+    location : Str,
+    description : Str,
+    startsAt : U128,
+    endsAt : U128,
+}
+
+decodeEvent : List U8 -> Result (List Event) _
+decodeEvent = \str -> str
+    |> Decode.fromBytes json
+
+# ==================================================================================================
+
+# =================================================
+#   - Request Info
+# =================================================
+RequestInfo := {
+    req : Request,
+    startTime : Utc.Utc,
+}
+
+displayStartTime : RequestInfo -> Str
+displayStartTime = \@RequestInfo { startTime: time } ->
+    Utc.toIso8601Str time
+
+method : RequestInfo -> Http.Method
+method = \@RequestInfo { req } ->
+    req.method
+
+# =================================================
+#   - Handling Server Response
+# =================================================
+
 ServerError : [
-    DBError Str,
-    DecodeError (List U8),
-    UnknownRoute,
+    DBError Str RequestInfo,
+    DecodeError (List U8) RequestInfo,
+    UnknownRoute RequestInfo,
 ]
 
 Status : [
@@ -133,79 +218,20 @@ handleServerError = \error ->
         |> Task.ok
 
     when error is
-        DBError dbPath ->
+        DBError dbPath _ ->
             {} <- Stderr.line "DB Error: \(dbPath)" |> Task.await
             errPage "DB Error" "Could not access DB." InternalServerError
 
-        DecodeError bytes ->
+        DecodeError bytes _ ->
             jsonStr =
                 (Str.fromUtf8 bytes)
                 |> Result.withDefault "UTF8 error"
             {} <- Stderr.line "Decode Error:\n\(jsonStr)" |> Task.await
             errPage "Decode Error" "Could not decode events from DB." InternalServerError
 
-        UnknownRoute ->
+        UnknownRoute _ ->
             {} <- Stderr.line "UnknownRoute" |> Task.await
             errPage "404" "UnknownRoute" NotFound
-
-routeIndex : Result Str [VarNotFound], Request -> HandlerResult
-routeIndex = \maybeDbPath, req ->
-    when (maybeDbPath, req.method) is
-        (Ok dbPath, Get) ->
-            dbPath
-            |> renderEventsList
-
-        # |> Task.onErr handleServerError
-        # |> Task.map toResponse
-        _ -> Task.err UnknownRoute
-
-renderEventsList : Str -> HandlerResult
-renderEventsList = \dbPath ->
-    events <-
-        Command.new "sqlite3"
-        |> Command.arg dbPath
-        |> Command.arg ".mode json"
-        |> Command.arg "SELECT id, slug, title, location, description, startsAt, endsAt from events;"
-        |> Command.output
-        |> Task.await \output ->
-            when output.status is
-                Ok {} -> Task.ok output.stdout
-                Err _ -> Task.err (DBError dbPath)
-        |> Task.await
-            (\bytes ->
-                when bytes |> decodeEvent is
-                    Ok decoded ->
-                        Task.ok decoded
-
-                    Err _ ->
-                        Task.err (DecodeError bytes)
-            )
-        |> Task.await
-
-    eventList = Html.ul [] (events |> List.map \{ title, location } -> Html.li [] [Html.text "\(title) at \(location)"])
-
-    Html.html [] [
-        Html.body [] [
-            Html.h1 [] [Html.text "Westies HB"],
-            eventList,
-        ],
-    ]
-    |> HtmlResponse OK
-    |> Task.ok
-
-Event : {
-    id : I32,
-    slug : Str,
-    title : Str,
-    location : Str,
-    description : Str,
-    startsAt : U128,
-    endsAt : U128,
-}
-
-decodeEvent : List U8 -> Result (List Event) _
-decodeEvent = \str -> str
-    |> Decode.fromBytes json
 
 jsonResponse : List U8, U16 -> Response
 jsonResponse = \bytes, status -> {
