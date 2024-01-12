@@ -1,0 +1,52 @@
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    color: #333;
+    font-size: 1rem;
+    margin: 0;
+    padding: 0;
+}
+
+ul {
+    margin: 0;
+}
+
+li {
+    list-style: none;
+}
+
+main {
+    margin-top: 1rem;
+}
+
+.flex {
+    display: flex;
+    gap: var(--gap, 1rem);
+}
+
+
+.top-header {
+    overflow: hidden;
+    background-color: #111;
+
+    width: 100%;
+    padding: 0.75rem;
+}
+
+.primary-navigation {
+    padding-inline-start: 0;;
+
+}
+
+.primary-navigation a {
+    color: #f2f2f2;
+}
+
+/* Primary Main */
+.primary-container {
+    margin-top: 1rem;
+}

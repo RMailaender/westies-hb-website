@@ -14,9 +14,11 @@ app "westies-hb-server"
         pf.Url,
         pf.Command,
         html.Html,
+        pf.File,
+        pf.Path,
+        html.Attribute.{ class },
         json.Core.{ json },
-        Decode.{ DecodeResult, DecodeError },
-        # "init_db.sql" as initDbSql : List U8,
+        Decode.{ DecodeResult },
     ]
     provides [main] to pf
 
@@ -56,9 +58,21 @@ main = \req ->
 
     handlerResponse =
         when req.url |> Url.fromStr |> Url.path |> Str.split "/" is
-            ["", ""] -> routeIndex maybeDbPath info
-            ["", "events"] -> Task.ok (TextResponse "events" OK) # renderEvent
-            _ -> Task.err (UnknownRoute info) # renderNotFound
+            ["", ""] ->
+                routeIndex maybeDbPath info
+
+            ["", "events"] ->
+                routeIndex maybeDbPath info
+
+            ["", "events", slug] ->
+                routeEvent maybeDbPath slug info
+
+            ["", "public", "style.css"] ->
+                File.readBytes (Path.fromStr "public/style.css")
+                |> Task.await \f -> Task.ok (CssResponse f)
+                |> Task.onErr (\_ -> Task.ok (TextResponse "events" HttpOK))
+
+            _ -> Task.err (UnknownRoute)
 
     handlerResponse
     |> Task.onErr handleServerError
@@ -71,46 +85,71 @@ routeIndex : Result Str [VarNotFound], RequestInfo -> HandlerResult
 routeIndex = \maybeDbPath, info ->
     when (maybeDbPath, method info) is
         (Ok dbPath, Get) ->
-            renderEventsList dbPath info
+            renderEventsList dbPath
 
-        _ -> Task.err (UnknownRoute info)
+        _ -> Task.err (UnknownRoute)
 
-renderEventsList : Str, RequestInfo -> HandlerResult
-renderEventsList = \dbPath, info ->
-    events <-
-        Command.new "sqlite3"
-        |> Command.arg dbPath
-        |> Command.arg ".mode json"
-        |> Command.arg "SELECT id, slug, title, location, description, startsAt, endsAt from events;"
-        |> Command.output
-        |> Task.await \output ->
-            when output.status is
-                Ok {} -> Task.ok output.stdout
-                Err _ -> Task.err (DBError dbPath info)
-        |> Task.await
-            (\bytes ->
-                when bytes |> decodeEvent is
-                    Ok decoded ->
-                        Task.ok decoded
+renderEventsList : Str -> HandlerResult
+renderEventsList = \dbPath ->
+    events <- publicEvents dbPath |> Task.await
 
-                    Err _ ->
-                        Task.err (DecodeError bytes info)
-            )
-        |> Task.await
-
-    eventList = Html.ul [] (events |> List.map \{ title, location } -> Html.li [] [Html.text "\(title) at \(location)"])
-
-    Html.html [] [
-        Html.body [] [
-            Html.h1 [] [Html.text "Westies HB"],
-            eventList,
+    pageLayout {
+        title: "Westies HB",
+        content: Html.div [] [
+            Html.h2 [] [Html.text "Events"],
+            monthSection events,
         ],
-    ]
-    |> HtmlResponse OK
+    }
+    |> HtmlResponse HttpOK
     |> Task.ok
 
+monthSection : List Event -> Html.Node
+monthSection = \events ->
+    eventSections = List.map events \{ title, slug, location } ->
+        Html.section [] [
+            Html.h3 [] [Html.a [Attribute.href "/events/\(slug)"] [Html.text title]],
+            Html.p [] [Html.text location],
+        ]
+
+    Html.section
+        []
+        (
+            [
+                Html.h2 [] [Html.text "Januar"],
+            ]
+            |> List.concat eventSections
+        )
 # =================================================
-#   - Event Type
+#   - EventDetails
+# =================================================
+routeEvent : Result Str [VarNotFound], Str, RequestInfo -> HandlerResult
+routeEvent = \maybeDbPath, slug, info ->
+    when (maybeDbPath, method info) is
+        (Ok dbPath, Get) ->
+            renderEvent dbPath slug
+
+        _ -> Task.err (UnknownRoute)
+
+renderEvent : Str, Str -> HandlerResult
+renderEvent = \dbPath, slug ->
+    events <- publicEventBySlug dbPath slug |> Task.await
+
+    when List.first events is
+        Ok { title, description } ->
+            pageLayout {
+                title: "Westies HB - \(title)",
+                content: Html.div [] [
+                    Html.h2 [] [Html.text title],
+                    Html.p [] [Html.text description],
+                ],
+            }
+            |> HtmlResponse HttpOK
+            |> Task.ok
+
+        Err _ -> Task.err UnknownRoute
+
+# =================================================
+#   - Event
 # =================================================
 
 Event : {
@@ -123,9 +162,93 @@ Event : {
     endsAt : U128,
 }
 
-decodeEvent : List U8 -> Result (List Event) _
-decodeEvent = \str -> str
-    |> Decode.fromBytes json
+publicEventBySlug : Str, Str -> Task (List Event) ServerError
+publicEventBySlug = \dbPath, slug ->
+    jsonLite dbPath
+    |> queryDb "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND slug=\"\(slug)\";" decodeEvent
+
+publicEvents : Str -> Task (List Event) ServerError
+publicEvents = \dbPath ->
+    jsonLite dbPath
+    |> queryDb "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1;" decodeEvent
+
+decodeEvent : List U8 -> Result (List Event) [JsonDecodeError Str (List U8)]
+decodeEvent = \bytes ->
+    when Decode.fromBytes bytes json is
+        Ok events -> Ok events
+        Err _ -> Err (JsonDecodeError "Events" bytes)
+
+# =================================================
+#   - View Components
+# =================================================
+pageLayout :
+    {
+        title : Str,
+        content : Html.Node,
+    }
+    -> Html.Node
+pageLayout = \{ title, content } ->
+    # style = styleCss |> Str.fromUtf8 |> Result.withDefault ""
+    Html.html [] [
+        Html.head [] [
+            Html.meta [Attribute.charset "utf-8"] [],
+            Html.link [Attribute.rel "stylesheet", Attribute.href "/public/style.css"] [],
+            Html.title [] [Html.text title],
+
+        ],
+        Html.body [] [
+            Html.header [class "top-header"] [
+                Html.nav [Attribute.id "main-nav"] [
+                    Html.h1 [] [
+                        Html.a [Attribute.href "/events"] [Html.text title],
+                    ],
+                ],
+            ],
+            Html.main [] [
+                content,
+            ],
+            Html.footer [] [],
+        ],
+    ]
+
+# =================================================
+#   - Sqlite
+# =================================================
+Mode : [Json]
+Sqlite := {
+    dbPath : Str,
+    mode : Mode,
+}
+
+jsonLite : Str -> Sqlite
+jsonLite = \dbPath ->
+    @Sqlite { dbPath, mode: Json }
+
+queryDb : Sqlite, Str, (List U8 -> Result decoded [JsonDecodeError Str (List U8)]) -> Task decoded ServerError
+queryDb = \@Sqlite { dbPath, mode }, query, decode ->
+    modeArg =
+        when mode is
+            Json -> ".mode json"
+
+    bytes <-
+        Command.new "sqlite3"
+        |> Command.arg dbPath
+        |> Command.arg modeArg
+        |> Command.arg query
+        |> Command.output
+        |> Task.await \output ->
+            when output.status is
+                Ok {} ->
+                    Task.ok output.stdout
+
+                Err _ ->
+                    err = (Str.fromUtf8 output.stderr) |> Result.withDefault "shit" |> Str.toUtf8
+                    Task.err (DBCommandFailed dbPath err)
+        |> Task.await
+
+    when decode bytes is
+        Ok decoded -> Task.ok decoded
+        Err (JsonDecodeError name b) -> Task.err (JsonDecodeError name b)
 
 # ==================================================================================================
 
@@ -150,14 +273,16 @@ method = \@RequestInfo { req } ->
 # =================================================
 
 ServerError : [
-    DBError Str RequestInfo,
-    DecodeError (List U8) RequestInfo,
-    UnknownRoute RequestInfo,
+    DBCommandFailed Str (List U8),
+    JsonDecodeError Str (List U8),
+    UnknownRoute,
+    CouldNotLoadCssError,
+    EnvNotFound Str,
 ]
 
 Status : [
     # 2xx success
-    OK,
+    HttpOK,
 
     # 4xx client errors
     BadRequest,
@@ -172,7 +297,7 @@ Status : [
 statusToU16 : Status -> U16
 statusToU16 = \code ->
     when code is
-        OK -> 200
+        HttpOK -> 200
         BadRequest -> 400
         Unauthorized -> 401
         Forbidden -> 403
@@ -183,6 +308,7 @@ ServerResponse : [
     HtmlResponse Html.Node Status,
     TextResponse Str Status,
     JsonResponse (List U8) Status,
+    CssResponse (List U8),
 ]
 
 HandlerResult : Task ServerResponse ServerError
@@ -202,6 +328,9 @@ toResponse = \result ->
         JsonResponse body s ->
             jsonResponse body (statusToU16 s)
 
+        CssResponse body ->
+            cssResponse body (statusToU16 HttpOK)
+
 handleServerError : ServerError -> Task ServerResponse []
 handleServerError = \error ->
     errPage = \errTitle, errTxt, status ->
@@ -218,26 +347,43 @@ handleServerError = \error ->
         |> Task.ok
 
     when error is
-        DBError dbPath _ ->
+        DBCommandFailed dbPath _ ->
             {} <- Stderr.line "DB Error: \(dbPath)" |> Task.await
             errPage "DB Error" "Could not access DB." InternalServerError
 
-        DecodeError bytes _ ->
+        JsonDecodeError name bytes ->
             jsonStr =
                 (Str.fromUtf8 bytes)
                 |> Result.withDefault "UTF8 error"
-            {} <- Stderr.line "Decode Error:\n\(jsonStr)" |> Task.await
+            {} <- Stderr.line "Decode Error -> \(name):\n\(jsonStr)" |> Task.await
             errPage "Decode Error" "Could not decode events from DB." InternalServerError
 
-        UnknownRoute _ ->
+        UnknownRoute ->
             {} <- Stderr.line "UnknownRoute" |> Task.await
             errPage "404" "UnknownRoute" NotFound
+
+        CouldNotLoadCssError ->
+            {} <- Stderr.line "CouldNotLoadCssError" |> Task.await
+            Task.ok (TextResponse "CouldNotLoadCssError" InternalServerError)
+
+        EnvNotFound env ->
+            {} <- Stderr.line "Env not found: \(env)" |> Task.await
+            errPage "Env not found" "Could not find env: \(env)" InternalServerError
 
 jsonResponse : List U8, U16 -> Response
 jsonResponse = \bytes, status -> {
     status,
     headers: [
         { name: "Content-Type", value: Str.toUtf8 "application/json; charset=utf-8" },
+    ],
+    body: bytes,
+}
+
+cssResponse : List U8, U16 -> Response
+cssResponse = \bytes, status -> {
+    status,
+    headers: [
+        { name: "Content-Type", value: Str.toUtf8 "text/css; charset=utf-8" },
     ],
     body: bytes,
 }
