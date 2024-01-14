@@ -1,3 +1,0 @@
-export DATA=./data/data.json
-export DB_PATH=./data/data.db 
-export TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyMTM1NDM2NCIsIm5hbWUiOiJSZW5lIiwiaWF0IjoxNTE2MjM5MDIyfQ.photcfICVTXVQmZxDZXFSqNI-Y8yamNrjQ_wOndEDRM

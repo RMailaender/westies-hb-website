@@ -1,0 +1,10 @@
+{
+    "targets": {
+        "Westies-Frontend": {
+            "inputs": [
+                "src/elm-app/Main.elm"
+            ],
+            "output": "build/public/main.js"
+        }
+    }
+}

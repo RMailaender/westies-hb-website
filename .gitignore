@@ -1,11 +1,13 @@
-*/**/node_modules 
+node_modules 
+elm-stuff
 
+server
+roc-out
 
-roc-server/server
-roc-server/roc-out
+build 
 
-roc-server/.env
-roc-server/setenv.sh
+.env
+setenv.sh
 test.db
 data.db
 
