@@ -1,8 +1,5 @@
-static-site-gen/output/*.html
-static-site-gen/output/subFolder
-static-site-gen/static-site
-static-site-gen/bin
-static-site-gen/platform/target
+*/**/node_modules 
+
 
 roc-server/server
 roc-server/roc-out

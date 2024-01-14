@@ -1,0 +1,22 @@
+{
+  "name": "elm-app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"pnpm run watch:elm\" \"pnpm run watch:vite\"",
+    "watch:elm": "elm-watch hot",
+    "watch:vite": "vite",
+    "build:vite": "vite build",
+    "preview:vite": "vite preview",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "concurrently": "^8.2.2",
+    "elm-watch": "^1.1.2",
+    "vite": "^5.0.11"
+  }
+}
