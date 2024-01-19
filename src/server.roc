@@ -11,14 +11,13 @@ app "westies-hb-server"
         pf.Http.{ Request, Response },
         pf.Utc,
         pf.Env,
-        pf.Url,
+        pf.Url.{ Url },
         pf.Command,
         html.Html,
-        pf.File,
-        pf.Path,
         html.Attribute.{ class },
         json.Core.{ json },
         Decode.{ DecodeResult },
+        "style.css" as styleFile : List U8,
     ]
     provides [main] to pf
 
@@ -54,23 +53,21 @@ main = \req ->
     info <- Utc.now |> Task.map (\startTime -> @RequestInfo { req, startTime }) |> Task.await
     {} <- Stdout.line "\(displayStartTime info) \(Http.methodToStr req.method) \(req.url)" |> Task.await
 
-    maybeDbPath <- Env.var "DB_PATH" |> Task.attempt
+    dbPath <-
+        Env.var "DB_PATH"
+        |> Task.onErr \_ -> crash "Unable to read DB_PATH"
+        |> Task.await
 
     handlerResponse =
-        when req.url |> Url.fromStr |> Url.path |> Str.split "/" is
-            ["", ""] ->
-                routeIndex maybeDbPath info
+        when (req.method, req.url |> Url.fromStr |> urlSegments) is
+            (Get, [""]) | (Get, ["events"]) ->
+                indexPage dbPath
 
-            ["", "events"] ->
-                routeIndex maybeDbPath info
+            (Get, ["events", slug]) ->
+                eventDetailPage dbPath slug
 
-            ["", "events", slug] ->
-                routeEvent maybeDbPath slug info
-
-            ["", "public", "style.css"] ->
-                File.readBytes (Path.fromStr "public/style.css")
-                |> Task.await \f -> Task.ok (CssResponse f)
-                |> Task.onErr (\_ -> Task.ok (TextResponse "events" HttpOK))
+            (Get, ["style.css"]) ->
+                Task.ok (CssResponse styleFile)
 
             _ -> Task.err (UnknownRoute)
 
@@ -81,16 +78,24 @@ main = \req ->
 # =================================================
 #   - Index && EventList
 # =================================================
-routeIndex : Result Str [VarNotFound], RequestInfo -> HandlerResult
-routeIndex = \maybeDbPath, info ->
-    when (maybeDbPath, method info) is
-        (Ok dbPath, Get) ->
-            renderEventsList dbPath
+indexPage : Str -> HandlerResult
+indexPage = \dbPath ->
+    monthSection = \monthEvents ->
+        eventSections = List.map monthEvents \{ title, slug, location } ->
+            Html.section [] [
+                Html.h3 [] [Html.a [Attribute.href "/events/\(slug)"] [Html.text title]],
+                Html.p [] [Html.text location],
+            ]
 
-        _ -> Task.err (UnknownRoute)
+        Html.section
+            []
+            (
+                [
+                    Html.h2 [] [Html.text "Januar"],
+                ]
+                |> List.concat eventSections
+            )
 
-renderEventsList : Str -> HandlerResult
-renderEventsList = \dbPath ->
     events <- publicEvents dbPath |> Task.await
 
     pageLayout {
@@ -103,35 +108,11 @@ renderEventsList = \dbPath ->
     |> HtmlResponse HttpOK
     |> Task.ok
 
-monthSection : List Event -> Html.Node
-monthSection = \events ->
-    eventSections = List.map events \{ title, slug, location } ->
-        Html.section [] [
-            Html.h3 [] [Html.a [Attribute.href "/events/\(slug)"] [Html.text title]],
-            Html.p [] [Html.text location],
-        ]
-
-    Html.section
-        []
-        (
-            [
-                Html.h2 [] [Html.text "Januar"],
-            ]
-            |> List.concat eventSections
-        )
 # =================================================
 #   - EventDetails
 # =================================================
-routeEvent : Result Str [VarNotFound], Str, RequestInfo -> HandlerResult
-routeEvent = \maybeDbPath, slug, info ->
-    when (maybeDbPath, method info) is
-        (Ok dbPath, Get) ->
-            renderEvent dbPath slug
-
-        _ -> Task.err (UnknownRoute)
-
-renderEvent : Str, Str -> HandlerResult
-renderEvent = \dbPath, slug ->
+eventDetailPage : Str, Str -> HandlerResult
+eventDetailPage = \dbPath, slug ->
     events <- publicEventBySlug dbPath slug |> Task.await
 
     when List.first events is
@@ -208,14 +189,15 @@ pageLayout = \{ title, content } ->
                 content,
             ],
             Html.footer [] [],
-            Html.script
-                [Attribute.src "./build/main.js"]
-                [],
-            Html.script
-                []
-                [Html.text "Elm.Main.init({ node: document.getElementById('wcscalenderapp') });"],
+
         ],
     ]
+
+# =================================================
+#   - helper
+# =================================================
+urlSegments : Url -> List Str
+urlSegments = \url -> url |> Url.path |> Str.split "/" |> List.dropFirst 1
 
 # =================================================
 #   - Sqlite
