@@ -1,3 +1,3 @@
-roc format ./src/roc-server/server.roc
+roc format ./src/server.roc
 
-roc check ./src/roc-server/server.roc
+roc check ./src/server.roc
