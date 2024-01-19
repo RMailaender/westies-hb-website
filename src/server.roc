@@ -113,9 +113,9 @@ indexPage = \dbPath ->
 # =================================================
 eventDetailPage : Str, Str -> HandlerResult
 eventDetailPage = \dbPath, slug ->
-    events <- publicEventBySlug dbPath slug |> Task.await
+    event <- publicEventBySlug dbPath slug |> Task.attempt
 
-    when List.first events is
+    when event is
         Ok { title, description } ->
             pageLayout {
                 title: "Westies HB - \(title)",
@@ -143,15 +143,22 @@ Event : {
     endsAt : U128,
 }
 
-publicEventBySlug : Str, Str -> Task (List Event) ServerError
-publicEventBySlug = \dbPath, slug ->
-    jsonLite dbPath
-    |> queryDb "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND slug=\"\(slug)\";" decodeEvent
+publicEventBySlug : Str, Str -> Task Event _
+publicEventBySlug = \slug, dbPath ->
+    "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND slug=\"\(slug)\";"
+    |> executeSql dbPath
+    |> Task.await \bytes ->
+        when Decode.fromBytes bytes json is
+            Err err -> Task.err (SqlParsingError err)
+            Ok events ->
+                events
+                |> List.first
+                |> Task.fromResult
 
 publicEvents : Str -> Task (List Event) ServerError
 publicEvents = \dbPath ->
     jsonLite dbPath
-    |> queryDb "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1;" decodeEvent
+    |> queryDbOld "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1;" decodeEvent
 
 decodeEvent : List U8 -> Result (List Event) [JsonDecodeError Str (List U8)]
 decodeEvent = \bytes ->
@@ -212,8 +219,25 @@ jsonLite : Str -> Sqlite
 jsonLite = \dbPath ->
     @Sqlite { dbPath, mode: Json }
 
-queryDb : Sqlite, Str, (List U8 -> Result decoded [JsonDecodeError Str (List U8)]) -> Task decoded ServerError
-queryDb = \@Sqlite { dbPath, mode }, query, decode ->
+executeSql : Str, Str -> Task (List U8) _
+executeSql = \query, dbPath ->
+    Command.new "sqlite3"
+    |> Command.arg dbPath
+    |> Command.arg ".mode json"
+    |> Command.arg query
+    |> Command.output
+    |> Task.await
+        \output ->
+            when output.status is
+                Ok {} ->
+                    Task.ok output.stdout
+
+                Err _ ->
+                    err = (Str.fromUtf8 output.stderr) |> Result.withDefault "shit" |> Str.toUtf8
+                    Task.err (DBCommandFailed dbPath err)
+
+queryDbOld : Sqlite, Str, (List U8 -> Result decoded [JsonDecodeError Str (List U8)]) -> Task decoded ServerError
+queryDbOld = \@Sqlite { dbPath, mode }, query, decode ->
     modeArg =
         when mode is
             Json -> ".mode json"
