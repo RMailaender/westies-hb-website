@@ -1,7 +1,3 @@
 roc format ./src/server.roc
 
-roc build ./src/server.roc --linker legacy --output ./build/server
-
-source ./setenv.sh
-
-./build/server
+DB_PATH=./data/data.db roc dev ./src/server.roc 
