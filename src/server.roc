@@ -17,7 +17,9 @@ app "westies-hb-server"
         html.Attribute.{ class },
         json.Core.{ json },
         Decode.{ DecodeResult },
+        Inspect,
         "style.css" as styleFile : List U8,
+        Time.{ TimeOffset },
     ]
     provides [main] to pf
 
@@ -48,10 +50,19 @@ app "westies-hb-server"
 # [- CSS builder]
 # - initDb should run once only. maybe add a 'init : {} -> Task initialData []' to the platform
 
+cet = Time.customZone (After (60 * 60)) []
+
 main : Request -> Task Response []
 main = \req ->
-    info <- Utc.now |> Task.map (\startTime -> @RequestInfo { req, startTime }) |> Task.await
-    {} <- Stdout.line "\(displayStartTime info) \(Http.methodToStr req.method) \(req.url)" |> Task.await
+    time <-
+        Utc.now
+        |> Task.map Utc.toNanosSinceEpoch
+        |> Task.map Time.posixFromNanos
+        |> Task.await
+
+    dt = Time.toDateTime time cet
+
+    {} <- Stdout.line "$(Num.toStr dt.year) \(Http.methodToStr req.method) \(req.url)" |> Task.await
 
     dbPath <-
         Env.var "DB_PATH"
@@ -64,6 +75,7 @@ main = \req ->
                 indexPage dbPath
 
             (Get, ["events", slug]) ->
+                {} <- Stdout.line "hier" |> Task.await
                 eventDetailPage dbPath slug
 
             (Get, ["style.css"]) ->
@@ -80,46 +92,73 @@ main = \req ->
 # =================================================
 indexPage : Str -> HandlerResult
 indexPage = \dbPath ->
-    monthSection = \monthEvents ->
-        eventSections = List.map monthEvents \{ title, slug, location } ->
-            Html.section [] [
-                Html.h3 [] [Html.a [Attribute.href "/events/\(slug)"] [Html.text title]],
-                Html.p [] [Html.text location],
-            ]
-
-        Html.section
-            []
-            (
-                [
-                    Html.h2 [] [Html.text "Januar"],
-                ]
-                |> List.concat eventSections
-            )
 
     events <- publicEvents dbPath |> Task.await
 
     pageLayout {
         title: "Westies HB",
-        content: Html.div [] [
-            Html.h2 [] [Html.text "Events"],
-            monthSection events,
+        content: [
+            eventsMonthSection events "Januar",
+            eventsMonthSection events "Februar",
         ],
     }
     |> HtmlResponse HttpOK
     |> Task.ok
+
+eventsMonthSection : List Event, Str -> Html.Node
+eventsMonthSection = \events, month ->
+    eventListItem = \event ->
+        Html.div [class "event-list-item"] [
+            Html.div [class "event-list-item--head"] [Html.text "13.01"],
+            Html.div [class "event-list-item--body"] [
+                Html.a [Attribute.href "/events/$(event.slug)"] [Html.text event.title],
+            ],
+        ]
+
+    eventsInHb =
+        events
+        |> List.keepIf (\{ location } -> Str.contains "Bremen" location)
+        |> List.map eventListItem
+        |> \hbEvents ->
+            when hbEvents is
+                [] -> Html.text ""
+                lst ->
+                    Html.div [class "events-month-group"] [
+                        Html.h3 [] [Html.text "In Bremen"],
+                        Html.div [class "event-list"] lst,
+                    ]
+    eventsOutsideHb =
+        events
+        |> List.dropIf (\{ location } -> Str.contains "Bremen" location)
+        |> List.map eventListItem
+        |> \hbEvents ->
+            when hbEvents is
+                [] -> Html.text ""
+                lst ->
+                    Html.div [class "events-month-group"] [
+                        Html.h3 [] [Html.text "Umzu"],
+                        Html.div [class "event-list"] lst,
+                    ]
+
+    Html.section [class "events-month-section"] [
+        Html.h2 [] [Html.text month],
+        eventsInHb,
+        eventsOutsideHb,
+    ]
 
 # =================================================
 #   - EventDetails
 # =================================================
 eventDetailPage : Str, Str -> HandlerResult
 eventDetailPage = \dbPath, slug ->
-    event <- publicEventBySlug dbPath slug |> Task.attempt
+    event <- publicEventBySlug slug dbPath |> Task.attempt
+    {} <- Stdout.line "event from db $(Inspect.toStr event)" |> Task.await
 
     when event is
         Ok { title, description } ->
             pageLayout {
                 title: "Westies HB - \(title)",
-                content: Html.div [] [
+                content: [
                     Html.h2 [] [Html.text title],
                     Html.p [] [Html.text description],
                 ],
@@ -145,7 +184,7 @@ Event : {
 
 publicEventBySlug : Str, Str -> Task Event _
 publicEventBySlug = \slug, dbPath ->
-    "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND slug=\"\(slug)\";"
+    "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND slug=\"$(slug)\";"
     |> executeSql dbPath
     |> Task.await \bytes ->
         when Decode.fromBytes bytes json is
@@ -172,7 +211,7 @@ decodeEvent = \bytes ->
 pageLayout :
     {
         title : Str,
-        content : Html.Node,
+        content : List Html.Node,
     }
     -> Html.Node
 pageLayout = \{ title, content } ->
@@ -192,9 +231,7 @@ pageLayout = \{ title, content } ->
                     ],
                 ],
             ],
-            Html.main [] [
-                content,
-            ],
+            Html.main [] content,
             Html.footer [] [],
 
         ],
@@ -233,7 +270,8 @@ executeSql = \query, dbPath ->
                     Task.ok output.stdout
 
                 Err _ ->
-                    err = (Str.fromUtf8 output.stderr) |> Result.withDefault "shit" |> Str.toUtf8
+                    err = (Str.fromUtf8 output.stderr) |> Result.withDefault "shit"
+                    {} <- Stdout.line "executeSql Err: $(err) " |> Task.await
                     Task.err (DBCommandFailed dbPath err)
 
 queryDbOld : Sqlite, Str, (List U8 -> Result decoded [JsonDecodeError Str (List U8)]) -> Task decoded ServerError
@@ -254,7 +292,7 @@ queryDbOld = \@Sqlite { dbPath, mode }, query, decode ->
                     Task.ok output.stdout
 
                 Err _ ->
-                    err = (Str.fromUtf8 output.stderr) |> Result.withDefault "shit" |> Str.toUtf8
+                    err = (Str.fromUtf8 output.stderr) |> Result.withDefault "shit"
                     Task.err (DBCommandFailed dbPath err)
         |> Task.await
 
@@ -265,27 +303,11 @@ queryDbOld = \@Sqlite { dbPath, mode }, query, decode ->
 # ==================================================================================================
 
 # =================================================
-#   - Request Info
-# =================================================
-RequestInfo := {
-    req : Request,
-    startTime : Utc.Utc,
-}
-
-displayStartTime : RequestInfo -> Str
-displayStartTime = \@RequestInfo { startTime: time } ->
-    Utc.toIso8601Str time
-
-method : RequestInfo -> Http.Method
-method = \@RequestInfo { req } ->
-    req.method
-
-# =================================================
 #   - Handling Server Response
 # =================================================
 
 ServerError : [
-    DBCommandFailed Str (List U8),
+    DBCommandFailed Str Str,
     JsonDecodeError Str (List U8),
     UnknownRoute,
     CouldNotLoadCssError,
