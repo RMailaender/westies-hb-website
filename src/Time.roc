@@ -355,13 +355,12 @@ expect
 toDateTime : Posix, Zone -> DateTime
 toDateTime = \time, zone ->
     seconds = toAdjustedSeconds time zone
-    dbg seconds
+
     minutes = Num.divTrunc seconds 60
     hours = Num.divTrunc minutes 60
     day = 1 + Num.divTrunc hours 24
     month = 1
     year = 1970
-    dbg year
     result = 
         epochMillisToDateTimeHelp {
             year,
@@ -371,7 +370,7 @@ toDateTime = \time, zone ->
             minutes,
             seconds,
         }
-    dbg result
+
     result
 
 expect 
@@ -390,7 +389,6 @@ expect
 toAdjustedSeconds : Posix, Zone -> U128
 toAdjustedSeconds = \time, @Zone { offset, eras } ->
     posixSeconds = posixToSeconds time
-    dbg posixSeconds
     toAdjustedSecondsHelp offset posixSeconds eras
 
 toAdjustedSecondsHelp : TimeOffset, U128, List Era -> U128
@@ -447,20 +445,7 @@ epochMillisToDateTimeHelp = \current ->
     countDaysInMonth = daysInMonth current.month current.year
 
     if current.day >= countDaysInYear then
-        dbg "current.day >= countDaysInYear"
-        dbg current
-        dbg current.year + 1
-
-        dbg current.year + 1
-        dbg current.month
-        dbg current.day - countDaysInYear
-        dbg (countDaysInYear * 24)
-        dbg current.hours
-        # [./src/Time.roc:457] (countDaysInYear * 24) = 8760
-        # [./src/Time.roc:458] current.hours = 8755
-        dbg current.hours - (countDaysInYear * 24)
-        dbg current.minutes - (countDaysInYear * 24 * 60)
-        dbg current.seconds - (countDaysInYear * 24 * 60 * 60)
+       
 
         epochMillisToDateTimeHelp {
             year: current.year + 1,
@@ -471,7 +456,7 @@ epochMillisToDateTimeHelp = \current ->
             seconds: current.seconds - (countDaysInYear * 24 * 60 * 60),
         }
     else if current.day >= countDaysInMonth then
-        dbg "current.day >= countDaysInMonth"
+
         epochMillisToDateTimeHelp {
             year: current.year,
             month: current.month + 1,
@@ -481,7 +466,7 @@ epochMillisToDateTimeHelp = \current ->
             seconds: current.seconds - (countDaysInMonth * 24 * 60 * 60),
         }
     else
-        dbg "else"
+
         { current &
             hours: current.hours % 24,
             minutes: current.minutes % 60,

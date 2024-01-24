@@ -118,12 +118,20 @@ dayWithPaddedZeros = monthWithPaddedZeros
 
 eventsMonthSection : List Event, Str -> Html.Node
 eventsMonthSection = \events, month ->
+    expect
+        "one" == month
+
     eventListItem = \event ->
+        expect
+            event.slug == ""
+
         startsAt =
             event.startsAt
             |> Time.toDateTime cet
             |> \dt ->
                 "$(dayWithPaddedZeros dt.day).$(monthWithPaddedZeros dt.month)"
+
+        expect startsAt == ""
 
         Html.div [class "event-list-item"] [
             Html.div [class "event-list-item--head"] [Html.text startsAt],

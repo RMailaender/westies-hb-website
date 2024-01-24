@@ -118,8 +118,10 @@ createSlug = \{ year, month, day}, title ->
     dateStrings = ["$(Num.toStr year)", "$(monthStr)", "$(dayStr)"]
     titleStrings =
         title
+        |> Str.replaceEach "!" ""
         |> Locale.toLowerCase
         |> Str.split " "
+        |> List.dropIf \elem -> elem == ""
         
     dateStrings 
     |> List.concat titleStrings
@@ -165,50 +167,50 @@ eventDataToDbEvent = \dbEvent ->
 events : List EventData
 events = [
     {
-        title: "WCS Open End Party",
-        location: "Tanzschule Heiko Stender, Tibarg 40, Hamburg",
+        title: "West Coast Swing Party mit Schnupperkurs für Neueinsteiger",
+        location: "Elbe-Werkstätten, Südring 38, 22303 Hamburg",
         description:
         """
-        Wir freuen uns, wieder eine West Coast Swing Party in unserer Tanzschule ankündigen zu können und hoffen sehr, ganz viele alte und neue Gesichter zu sehen.
-
-        Meldet euch gerne vorab an!
-        Eintritt Party: 6 EUR
+        West Coast Swing Party mit Schnupperkurs für Neueinsteiger
         """,
-        startsAt: "2024-02-07 18:30",
-        endsAt: "2024-02-07 18:30",
+        startsAt: "2024-01-03 18:30",
+        endsAt: "2024-01-03 21:45",
     },
     {
-        title: "Social Sunday mit Schnupperkurs",
-        location: "Tanzwerkstatt Hamburg-Eimsbüttel, Hoheluftchaussee 108, Hamburg",
+        title: "SOCIAL SUNDAY West Coast Swing - NEUE LOCATION!!!",
+        location: "Tanzwerkstatt Hamburg, Eifflerstraße 1, 22769 Hamburg, Deutschland",
         description:
         """
-        SOCIAL SUNDAY - Die West Coast Swing Party am Sonntag! Was? Wir starten mit einem Schnupperkurs für alle, die Lust haben, diesen lässig-modernen Tanz kennenzulernen. 
-
-        Wer? Du! Komm' alleine, zu zweit, oder bring' gleich alle Freund*innen mit - jeder ist willkommen! 
-
-        KEINE VORANMELDUNG NÖTIG 
-
-        17:00 Uhr - 18:00 Uhr -> Schnupperkurs
-        18:00 Uhr - Open End -> Party
-        Eintritt? 8,- € (inkl. Schnupperkurs)
+        SOCIAL SUNDAY West Coast Swing - NEUE LOCATION!!!
         """,
-        startsAt: "2024-02-07 18:30",
-        endsAt: "2024-02-07 18:30",
+        startsAt: "2024-01-14 17:00",
+        endsAt: "2024-01-14 20:00",
     },
     {
-        title: "Last Friday Swing",
-        location: "Hamburg Dance Academy, Stader Str. 2-4, Hamburg",
+        title: "Tanzabend West Coast Swing und Discofox Slow",
+        location: "Hamburg Dance Academy, Stader Str. 2- 4, 21075, Hamburg",
         description:
         """
-        Unsere Tanznacht 'Last Friday Swing' ist Hamburgs erstes monatliches Event für 'West Coast Swing' und 'Discofox Slow' im südlichen Teil von Hamburg (Harburg). Unser Ziel ist es, eine gemeinsame Plattform für beide Tanzwelten zu schaffen und eine neue Heimat zu etablieren.
+        Die Party geht bis 02:00 Uhr
 
-        Einlass: ab 21:00 Uhr
-        Beginn: 21:30 Uhr Eröffnung
-        Festes Ende: 01:30 Uhr
+        Unsere Tanznacht Last Friday Swing ist Hamburgs erstes monatliches Event für West Coast Swing und Discofox Slow im südlichen Teil von Hamburg (Harburg). Unser Ziel ist es, eine gemeinsame Plattform für beide Tanzwelten zu schaffen und eine neue Heimat zu etablieren.
+
+        Damit Dein Besuch reibungslos verläuft, gibt es einige Dinge, die Du im Voraus wissen solltest. Wir glauben fest daran, dass die Fusion von West Coast Swing und Discofox Slow möglich ist, solange es einen festen musikalischen Rahmen gibt.
+
+        Die Musik spielt hierbei eine entscheidende Rolle. Obwohl die beiden Szenen normalerweise unterschiedliche Musik bevorzugen, machen wir eine Ausnahme! Bei unserer Tanznacht Last Friday Swing hörst Du vorwiegend englische Titel – keine Schlagerparty. Die sorgfältig ausgewählte Musik ist vielseitig und perfekt für kreative Improvisationen geeignet – bei uns gibt es kein einfaches 4 on the floor sondern unsere Musik ist swing lastig.
+
+        Unsere Musikauswahl umfasst sowohl langsame als auch schnellere Lieder, mit einem Tempo von etwa 100 bis 120 BPM. Sehr schnelle Lieder mit über 130 BPM wirst Du bei uns nicht finden.
+
+        Falls der Begriff Discofox Slow neu für Dich ist, sei versichert, dass dieser Bereich innerhalb des Discofox stetig wächst und immer beliebter wird. Die Musik ist langsamer, die Bewegungen können fließender sein, und dank der vielfältigen Musik bieten sich zahlreiche Möglichkeiten für Improvisationen, Breaks und Stops. Dies verleiht dem Discofox eine völlig neue Dimension.
+
+        Weitere Infos :
+
+        https://www.hamburg-dance-academy.de/events/unsere-veranstaltungen/tanznacht-last-friday-swing.html
         """,
-        startsAt: "2024-02-07 18:30",
-        endsAt: "2024-02-07 18:30",
+        startsAt: "2024-01-26 21:00",
+        endsAt: "2024-01-27 2:00",
     },
+    
     {
         title: "Anchor Saturday",
         location: "Tanzwerkstatt Hoheluft, Hoheluftchaussee 108, 20253 Hamburg",
@@ -259,7 +261,7 @@ events = [
         endsAt: "2024-02-07 21:45",
     },
     {
-        title: "West Coast Swing Workshop mit Tommy und Melli + Party in der Tanzarena City",
+        title: "West Coast Swing Workshop mit Tommy und Melli Party in der Tanzarena City",
         location: "Tanzarena City, Wandschneiderstr. 6, 28195 Bremen",
         description:
         """
@@ -294,72 +296,59 @@ events = [
         startsAt: "2024-02-10 15:00",
         endsAt: "2024-02-10 23:59",
     },
+    {
+        title: "Mein Tanzstudio West Coast Swing Party",
+        location: "Mein Tanzstudio, Rantzaustrasse 74b, 22041, Hamburg",
+        description:
+        """
+        Die Mein Tanzstudio West Coast Swing Party.
+        Jeden 3. Freitag im Monat!
+        Gute Musik, tolle Community, die sich über Neuzugänge freut.
+        Auch für Singles bestens geeignet.
+
+        Eintrittspreis: 8€
+
+        Wir freuen uns auf euch!
+        """,
+        startsAt: "2024-02-16 20:00",
+        endsAt: "2024-02-16 23:59",
+    },
+    {
+        title: "WCS All LvL Workshop und Open End Party",
+        location: "Tanzschule Heiko Stender,Tibarg 40, 22459, Hamburg",
+        description:
+        """
+        All LvL Workshop mit Nathalie(18:30 - 20:00)
+        Grundvoraussetzung:
+        - Sugar Push
+        - Left Side Pass
+        - Under Arm Turn
+        - Wipe
+        mit anschließender Party (20:00 - ? )
+
+        Workshop 10€
+        Workshop mit Party 15€
+        Nur Party 6€
+
+        Abendkasse ist möglich
+        """,
+        startsAt: "2024-02-17 18:30",
+        endsAt: "2024-02-17 21:30",
+    },
+    {
+        title: "Pre Party zum West Coast Swing Workshop Weekend mit Marc Heldt nur Teilnehmer des Workshops",
+        location: "Monopol, Ostertorwall 43, Hameln, Germany",
+        description:
+        """
+        Das XL West Coast Swing Weekend in Hameln.
+        The One and Only Marc Heldt kommt zu uns in die Rattenfängerstadt.
+
+        Gestartet wird am Freitag um 20:00 Uhr mit einer PRE Party in der Tanzschule bewegungsart (nur für Workshopteilnehmer)
+
+        Ab Samstag schwingen wir dann über den Dächern der Stadt unsere Hüften.
+        """,
+        startsAt: "2024-02-23 20:00",
+        endsAt: "2024-02-23 23:59",
+    },
+
 ]
-
-# janEvents : List Event
-# janEvents = [
-#     {
-#         slug: "2024-01-13-wcs-open-end-party",
-#         title: "WCS Open End Party",
-#         location: "Tanzschule Heiko Stender, Tibarg 40, Hamburg",
-#         description:
-#         """
-#         Wir freuen uns, wieder eine West Coast Swing Party in unserer Tanzschule ankündigen zu können und hoffen sehr, ganz viele alte und neue Gesichter zu sehen.
-
-#         Meldet euch gerne vorab an!
-#         Eintritt Party: 6 EUR
-#         """,
-#         startsAt: 1705172400,
-#         endsAt: 1705186740,
-#     },
-#     {
-#         slug: "2024-01-14-social-sunday-mit-schnupperkurs",
-#         title: "Social Sunday mit Schnupperkurs",
-#         location: "Tanzwerkstatt Hamburg-Eimsbüttel, Hoheluftchaussee 108, Hamburg",
-#         description:
-#         """
-#         SOCIAL SUNDAY - Die West Coast Swing Party am Sonntag! Was? Wir starten mit einem Schnupperkurs für alle, die Lust haben, diesen lässig-modernen Tanz kennenzulernen. 
-
-#         Wer? Du! Komm' alleine, zu zweit, oder bring' gleich alle Freund*innen mit - jeder ist willkommen! 
-
-#         KEINE VORANMELDUNG NÖTIG 
-
-#         17:00 Uhr - 18:00 Uhr -> Schnupperkurs
-#         18:00 Uhr - Open End -> Party
-#         Eintritt? 8,- € (inkl. Schnupperkurs)
-#         """,
-#         startsAt: 1705248000,
-#         endsAt: 1705273140,
-#     },
-#     {
-#         slug: "2024-01-26-last-friday-swing",
-#         title: "Last Friday Swing",
-#         location: "Hamburg Dance Academy, Stader Str. 2-4, Hamburg",
-#         description:
-#         """
-#         Unsere Tanznacht 'Last Friday Swing' ist Hamburgs erstes monatliches Event für 'West Coast Swing' und 'Discofox Slow' im südlichen Teil von Hamburg (Harburg). Unser Ziel ist es, eine gemeinsame Plattform für beide Tanzwelten zu schaffen und eine neue Heimat zu etablieren.
-
-#         Einlass: ab 21:00 Uhr
-#         Beginn: 21:30 Uhr Eröffnung
-#         Festes Ende: 01:30 Uhr
-#         """,
-#         startsAt: 1706299200,
-#         endsAt: 1706315400,
-#     },
-
-#     {
-#         slug: "2024-02-03-anchor-saturday",
-#         title: "Anchor Saturday",
-#         location: "Hamburg Dance Academy, Stader Str. 2-4, Hamburg",
-#         description:
-#         """
-#         Unsere Tanznacht 'Last Friday Swing' ist Hamburgs erstes monatliches Event für 'West Coast Swing' und 'Discofox Slow' im südlichen Teil von Hamburg (Harburg). Unser Ziel ist es, eine gemeinsame Plattform für beide Tanzwelten zu schaffen und eine neue Heimat zu etablieren.
-
-#         Einlass: ab 21:00 Uhr
-#         Beginn: 21:30 Uhr Eröffnung
-#         Festes Ende: 01:30 Uhr
-#         """,
-#         startsAt: 1706299200,
-#         endsAt: 1706315400,
-#     },
-# ]
