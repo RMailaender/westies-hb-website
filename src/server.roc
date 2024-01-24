@@ -118,20 +118,14 @@ dayWithPaddedZeros = monthWithPaddedZeros
 
 eventsMonthSection : List Event, Str -> Html.Node
 eventsMonthSection = \events, month ->
-    expect
-        "one" == month
 
     eventListItem = \event ->
-        expect
-            event.slug == ""
 
         startsAt =
             event.startsAt
             |> Time.toDateTime cet
             |> \dt ->
                 "$(dayWithPaddedZeros dt.day).$(monthWithPaddedZeros dt.month)"
-
-        expect startsAt == ""
 
         Html.div [class "event-list-item"] [
             Html.div [class "event-list-item--head"] [Html.text startsAt],
@@ -142,7 +136,7 @@ eventsMonthSection = \events, month ->
 
     eventsInHb =
         events
-        |> List.keepIf (\{ location } -> Str.contains "Bremen" location)
+        |> List.keepIf \{ location } -> Str.contains location "Bremen"
         |> List.map eventListItem
         |> \hbEvents ->
             when hbEvents is
@@ -154,7 +148,7 @@ eventsMonthSection = \events, month ->
                     ]
     eventsOutsideHb =
         events
-        |> List.dropIf (\{ location } -> Str.contains "Bremen" location)
+        |> List.dropIf \{ location } -> Str.contains location "Bremen"
         |> List.map eventListItem
         |> \hbEvents ->
             when hbEvents is
