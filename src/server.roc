@@ -62,7 +62,7 @@ main = \req ->
 
     dt = Time.toDateTime time cet
 
-    {} <- Stdout.line "$(Num.toStr dt.year) \(Http.methodToStr req.method) \(req.url)" |> Task.await
+    {} <- Stdout.line "$(Time.displayDt dt) \(Http.methodToStr req.method) \(req.url)" |> Task.await
 
     dbPath <-
         Env.var "DB_PATH"
@@ -105,7 +105,7 @@ indexPage = \dbPath ->
     |> HtmlResponse HttpOK
     |> Task.ok
 
-eventsMonthSection : List Event, Str -> Html.Node
+eventsMonthSection : List EventDb, Str -> Html.Node
 eventsMonthSection = \events, month ->
     eventListItem = \event ->
         Html.div [class "event-list-item"] [
@@ -178,11 +178,32 @@ Event : {
     title : Str,
     location : Str,
     description : Str,
+    startsAt : Time.Posix,
+    endsAt : Time.Posix,
+}
+
+eventFromDb : EventDb -> Event
+eventFromDb = \{ id, slug, title, location, description, startsAt, endsAt } -> {
+    id,
+    slug,
+    title,
+    location,
+    description,
+    startsAt: Time.posixFromSeconds startsAt,
+    endsAt: Time.posixFromSeconds endsAt,
+}
+
+EventDb : {
+    id : I32,
+    slug : Str,
+    title : Str,
+    location : Str,
+    description : Str,
     startsAt : U128,
     endsAt : U128,
 }
 
-publicEventBySlug : Str, Str -> Task Event _
+publicEventBySlug : Str, Str -> Task EventDb _
 publicEventBySlug = \slug, dbPath ->
     "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND slug=\"$(slug)\";"
     |> executeSql dbPath
@@ -194,12 +215,12 @@ publicEventBySlug = \slug, dbPath ->
                 |> List.first
                 |> Task.fromResult
 
-publicEvents : Str -> Task (List Event) ServerError
+publicEvents : Str -> Task (List EventDb) ServerError
 publicEvents = \dbPath ->
     jsonLite dbPath
     |> queryDbOld "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1;" decodeEvent
 
-decodeEvent : List U8 -> Result (List Event) [JsonDecodeError Str (List U8)]
+decodeEvent : List U8 -> Result (List EventDb) [JsonDecodeError Str (List U8)]
 decodeEvent = \bytes ->
     when Decode.fromBytes bytes json is
         Ok events -> Ok events

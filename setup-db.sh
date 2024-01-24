@@ -1,7 +1,11 @@
-roc build ./src/setup.roc --output ./roc-out/dev/setup
+rm -rf data
 
-export DB_PATH=./data/data.db
+mkdir data
 
-# sqlite3 $DB_PATH .read "./src/init_db.sql" 
+DB_PATH=./data/data.db
+INIT_DB_SCRIPT=./db/init_db.sql
+SEED_DB_SCRIPT=./db/seed.sql
 
-./roc-out/dev/setup
+sqlite3 data/data.db ".read db/init_db.sql" 
+sqlite3 data/data.db ".read db/seed.sql" 
+

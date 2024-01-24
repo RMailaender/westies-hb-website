@@ -1,8 +1,12 @@
 interface Time
     exposes [
         DateTime,
+        Posix,
+        Zone,
+        dateTimeToPosix,
         posixFromMillis,
-        fromMinutes,
+        sameMonth,
+        gtEqMonth,
         posixFromNanos,
         posixFromSeconds,
         toIso8601Str,
@@ -13,6 +17,7 @@ interface Time
         posixToMinutes,
         toDateTime,
         TimeOffset,
+        displayDt,
     ]
     imports [
     ]
@@ -30,82 +35,22 @@ Era : { start : U128, offset : TimeOffset }
 
 DateTime : { year : U128, month : U128, day : U128, hours : U128, minutes : U128, seconds : U128 }
 
-Time : [
-    Nanosecond U128,
-    Millisecond U128,
-    Second U128,
-    Minute U128,
-    Hour U128,
-    Day U128,
-    Week U128,
-]
+displayDt : DateTime -> Str
+displayDt = \dt -> "$(Num.toStr dt.day).$(Num.toStr dt.month).$(Num.toStr dt.year) :: $(Num.toStr dt.hours):$(Num.toStr dt.minutes):$(Num.toStr dt.seconds)"
 
-fromMinutes : U128 -> Time
-fromMinutes = Minute
+eq : Posix, Posix -> Bool
+eq = \@Posix a, @Posix b ->
+    (a) == (b)
 
-fromSeconds : U128 -> Time
-fromSeconds = Second
+gt : Posix, Posix -> Bool
+gt = \@Posix a, @Posix b ->
+    (a) > (b)
 
-fromNanos : U128 -> Time
-fromNanos = Nanosecond
+lt : Posix, Posix -> Bool
+lt = \@Posix a, @Posix b ->
+    (a) < (b)
 
-toNanos : Time -> U128
-toNanos = \time ->
-    when time is
-        Nanosecond nanos ->
-            nanos
-
-        Millisecond millis ->
-            millis * nanosPerMilli
-
-        Second seconds ->
-            seconds * millisPerSecond * nanosPerMilli
-
-        Minute min ->
-            min * secondsPerMinute * millisPerSecond * nanosPerMilli
-
-        Hour hour ->
-            hour * minutesPerHour * secondsPerMinute * millisPerSecond * nanosPerMilli
-
-        Day day ->
-            day * hoursPerDay * minutesPerHour * secondsPerMinute * millisPerSecond * nanosPerMilli
-
-        Week week ->
-            week * daysPerWeek * hoursPerDay * minutesPerHour * secondsPerMinute * millisPerSecond * nanosPerMilli
-
-toMinutes : Time -> U128
-toMinutes = \time ->
-    (toNanos time) // nanosPerMilli // millisPerSecond // secondsPerMinute
-
-add : Time, Time -> Time
-add = \a, b ->
-    (toNanos a)
-    + (toNanos b)
-    |> Nanosecond
-
-sub : Time, Time -> Time
-sub = \a, b ->
-    (toNanos a)
-    - (toNanos b)
-    |> Nanosecond
-
-expect
-    r = add (Minute 32) (Minute 8)
-    (toMinutes r) == (toMinutes (Minute 40))
-
-eq : Time, Time -> Bool
-eq = \a, b ->
-    (toNanos a) == (toNanos b)
-
-gt : Time, Time -> Bool
-gt = \a, b ->
-    (toNanos a) > (toNanos b)
-
-lt : Time, Time -> Bool
-lt = \a, b ->
-    (toNanos a) < (toNanos b)
-
-compare : Time, Time -> [LT, EQ, GT]
+compare : Posix, Posix -> [LT, EQ, GT]
 compare = \a, b ->
     if eq a b then
         EQ
@@ -114,10 +59,92 @@ compare = \a, b ->
     else
         GT
 
+gtEqMonth : Posix, Posix, Zone -> Bool
+gtEqMonth = \x, reference, zone ->
+    xDt = toDateTime x zone
+    refDt = toDateTime reference zone
+
+    (xDt.year > refDt.year)
+    ||
+    ((xDt.year == refDt.year) && (xDt.month >= refDt.month))
+
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2024-02-08
+    x = posixFromSeconds 1707415200
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
+
+    gtEqMonth x ref cet == Bool.true
+
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2025-01-06
+    x = posixFromSeconds 1736186400
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
+
+    gtEqMonth x ref cet == Bool.true
+
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2024-01-10
+    x = posixFromSeconds 1704909600
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
+
+    gtEqMonth x ref cet == Bool.false
+
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2023-03-02
+    x = posixFromSeconds 1677780000
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
+
+    gtEqMonth x ref cet == Bool.false
+
+sameMonth : Posix, Posix, Zone -> Bool
+sameMonth = \x, reference, zone ->
+    xDt = toDateTime x zone
+    refDt = toDateTime reference zone
+
+    ((xDt.year == refDt.year) && (xDt.month == refDt.month))
+
+# Same month
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2024-02-08
+    x = posixFromSeconds 1707415200
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
+
+    sameMonth x ref cet == Bool.true
+
+# Some time before
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2023-03-02
+    x = posixFromSeconds 1677780000
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
+
+    sameMonth x ref cet == Bool.false
+
+# same month next year
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2025-02-05
+    x = posixFromSeconds 1738778400
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
+
+    sameMonth x ref cet == Bool.false
+
 nanosPerMilli = 1_000_000
 millisPerSecond = 1_000
 secondsPerMinute = 60
-minutesPerHour = 24
+minutesPerHour = 60
 hoursPerDay = 24
 daysPerWeek = 7
 
@@ -217,7 +244,7 @@ expect List.map [2023, 1988, 1992, 1996] isLeapYear == [Bool.false, Bool.true, B
 expect List.map [1700, 1800, 1900, 2100, 2200, 2300, 2500, 2600] isLeapYear == [Bool.false, Bool.false, Bool.false, Bool.false, Bool.false, Bool.false, Bool.false, Bool.false]
 
 daysInMonth : U128, U128 -> U128
-daysInMonth = \year, month ->
+daysInMonth = \month, year ->
     if List.contains [1, 3, 5, 7, 8, 10, 12] month then
         31
     else if List.contains [4, 6, 9, 11] month then
@@ -227,24 +254,107 @@ daysInMonth = \year, month ->
     else
         0
 
-expect daysInMonth 2023 1 == 31 # January
-expect daysInMonth 2023 2 == 28 # February
-expect daysInMonth 1996 2 == 29 # February in a leap year
-expect daysInMonth 2023 3 == 31 # March
-expect daysInMonth 2023 4 == 30 # April
-expect daysInMonth 2023 5 == 31 # May
-expect daysInMonth 2023 6 == 30 # June
-expect daysInMonth 2023 7 == 31 # July
-expect daysInMonth 2023 8 == 31 # August
-expect daysInMonth 2023 9 == 30 # September
-expect daysInMonth 2023 10 == 31 # October
-expect daysInMonth 2023 11 == 30 # November
-expect daysInMonth 2023 12 == 31 # December
+expect daysInMonth 1 2023 == 31 # January
+expect daysInMonth 2 2023 == 28 # February
+expect daysInMonth 2 1996 == 29 # February in a leap year
+expect daysInMonth 3 2023 == 31 # March
+expect daysInMonth 4 2023 == 30 # April
+expect daysInMonth 5 2023 == 31 # May
+expect daysInMonth 6 2023 == 30 # June
+expect daysInMonth 7 2023 == 31 # July
+expect daysInMonth 8 2023 == 31 # August
+expect daysInMonth 9 2023 == 30 # September
+expect daysInMonth 10 2023 == 31 # October
+expect daysInMonth 11 2023 == 30 # November
+expect daysInMonth 12 2023 == 31 # December
+
+daysInYear : U128 -> U128
+daysInYear = \year -> if isLeapYear year then 366 else 365
+
+daysToSeconds : U128 -> U128
+daysToSeconds = \d -> d * hoursPerDay * minutesPerHour * secondsPerMinute
+
+expect
+    actual = daysToSeconds 2
+    expected = 172800
+
+    actual == expected
+
+dateTimeToPosix : DateTime, Zone -> Posix
+dateTimeToPosix = \current, zone ->
+    days = if current.day > 0 then current.day - 1 else 0
+    months = if current.month > 0 then current.month - 1 else 0
+
+    secondsCurrentMonth =
+        current.seconds
+        |> Num.add (current.minutes * secondsPerMinute)
+        |> Num.add (current.hours * minutesPerHour * secondsPerMinute)
+        |> Num.add (daysToSeconds days)
+
+    secondsCurrentYear =
+        List.range { start: At 1, end: Before current.month }
+        |> List.map \month -> daysInMonth month current.year
+        |> List.map daysToSeconds
+        |> List.walk secondsCurrentMonth Num.add
+
+    List.range { start: At 1970, end: Before current.year }
+    |> List.map daysInYear
+    |> List.map daysToSeconds
+    |> List.walk secondsCurrentYear Num.add
+    |> subtractOffsetFromSeconds zone
+    |> posixFromSeconds
+
+# 05/02/2025 17:55:55
+expect
+    utc = customZone (After 0) []
+    actual =
+        { year: 2025, month: 2, day: 5, hours: 17, minutes: 55, seconds: 55 }
+        |> dateTimeToPosix utc
+        |> posixToSeconds
+
+    expected = 1738778155
+
+    actual == expected
+
+# 05/02/2025 17:55:55
+expect
+    cet = customZone (After (60 * 60)) []
+    actual =
+        { year: 2025, month: 2, day: 5, hours: 17, minutes: 55, seconds: 55 }
+        |> dateTimeToPosix cet
+        |> posixToSeconds
+
+    expected = 1738774555
+
+    actual == expected
+
+# 01/02/2024 17:55:55
+expect
+    utc = customZone (After 0) []
+    actual =
+        { year: 2024, month: 2, day: 1, hours: 17, minutes: 55, seconds: 55 }
+        |> dateTimeToPosix utc
+        |> posixToSeconds
+
+    expected = 1706810155
+
+    actual == expected
+
+# 01/01/2024 00:00:00
+expect
+    utc = customZone (After 0) []
+    actual =
+        { year: 2024, month: 1, day: 1, hours: 0, minutes: 0, seconds: 0 }
+        |> dateTimeToPosix utc
+        |> posixToSeconds
+
+    expected = 1704067200
+
+    actual == expected
 
 toDateTime : Posix, Zone -> DateTime
-toDateTime = \@Posix nanos, zone ->
-    millis = nanos // nanosPerMilli
-    seconds = millis // 1000
+toDateTime = \time, zone ->
+    seconds = toAdjustedSeconds time zone
     minutes = Num.divTrunc seconds 60
     hours = Num.divTrunc minutes 60
     day = 1 + Num.divTrunc hours 24
@@ -262,8 +372,8 @@ toDateTime = \@Posix nanos, zone ->
 
 toAdjustedSeconds : Posix, Zone -> U128
 toAdjustedSeconds = \time, @Zone { offset, eras } ->
-    minutes = posixToSeconds time
-    toAdjustedSecondsHelp offset minutes eras
+    posixSeconds = posixToSeconds time
+    toAdjustedSecondsHelp offset posixSeconds eras
 
 toAdjustedSecondsHelp : TimeOffset, U128, List Era -> U128
 toAdjustedSecondsHelp = \defaultOffset, posixSeconds, eras ->
@@ -277,6 +387,22 @@ toAdjustedSecondsHelp = \defaultOffset, posixSeconds, eras ->
             else
                 toAdjustedSecondsHelp defaultOffset posixSeconds olderEras
 
+subtractOffsetFromSeconds : U128, Zone -> U128
+subtractOffsetFromSeconds = \posixSeconds, @Zone { offset, eras } ->
+    subtractOffsetFromSecondsHelp offset posixSeconds eras
+
+subtractOffsetFromSecondsHelp : TimeOffset, U128, List Era -> U128
+subtractOffsetFromSecondsHelp = \defaultOffset, posixSeconds, eras ->
+    when eras is
+        [] ->
+            applyReversedOffsetToPosixSeconds posixSeconds defaultOffset
+
+        [era, .. as olderEras] ->
+            if era.start < posixSeconds then
+                applyReversedOffsetToPosixSeconds posixSeconds era.offset
+            else
+                subtractOffsetFromSecondsHelp defaultOffset posixSeconds olderEras
+
 applyOffsetToPosixSeconds : U128, TimeOffset -> U128
 applyOffsetToPosixSeconds = \posixSeconds, offset ->
     when offset is
@@ -286,11 +412,20 @@ applyOffsetToPosixSeconds = \posixSeconds, offset ->
         After seconds ->
             posixSeconds + seconds
 
+applyReversedOffsetToPosixSeconds : U128, TimeOffset -> U128
+applyReversedOffsetToPosixSeconds = \posixSeconds, offset ->
+    when offset is
+        Before seconds ->
+            posixSeconds + seconds
+
+        After seconds ->
+            posixSeconds - seconds
+
 epochMillisToDateTimeHelp : DateTime -> DateTime
 epochMillisToDateTimeHelp = \current ->
 
     countDaysInYear = if isLeapYear current.year then 366 else 365
-    countDaysInMonth = daysInMonth current.year current.month
+    countDaysInMonth = daysInMonth current.month current.year
 
     if current.day >= countDaysInYear then
         epochMillisToDateTimeHelp {
