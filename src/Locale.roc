@@ -6,28 +6,28 @@ interface Locale
 
     ]
 
-toLowerCase : Str -> Str 
-toLowerCase = \input -> 
+toLowerCase : Str -> Str
+toLowerCase = \input ->
     result =
         input
         |> Str.toUtf8
         |> List.map toLowerChar
         |> Str.fromUtf8
 
-    when result is 
-        Ok str -> str 
+    when result is
+        Ok str -> str
         Err _ -> crash "This should not be reachable"
 
-expect 
+expect
     input = "hElLoPe WORld! The answer 1S 42. ?"
     actual = toLowerCase input
     expected = "hellope world! the answer 1s 42. ?"
 
     actual == expected
 
-toLowerChar : U8 -> U8 
-toLowerChar = \input -> 
-    when input is 
+toLowerChar : U8 -> U8
+toLowerChar = \input ->
+    when input is
         'A' -> 'a'
         'B' -> 'b'
         'C' -> 'c'
@@ -56,28 +56,28 @@ toLowerChar = \input ->
         'Z' -> 'z'
         _ -> input
 
-toUpperCase : Str -> Str 
-toUpperCase = \input -> 
+toUpperCase : Str -> Str
+toUpperCase = \input ->
     result =
         input
         |> Str.toUtf8
         |> List.map toUpperChar
         |> Str.fromUtf8
 
-    when result is 
-        Ok str -> str 
+    when result is
+        Ok str -> str
         Err _ -> crash "This should not be reachable"
 
-expect 
+expect
     input = "hElLoPe WORld! The answer 1S 42. ?"
     actual = toUpperCase input
     expected = "HELLOPE WORLD! THE ANSWER 1S 42. ?"
 
     actual == expected
 
-toUpperChar : U8 -> U8 
-toUpperChar = \input -> 
-    when input is 
+toUpperChar : U8 -> U8
+toUpperChar = \input ->
+    when input is
         'a' -> 'A'
         'b' -> 'B'
         'c' -> 'C'

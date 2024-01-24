@@ -105,11 +105,28 @@ indexPage = \dbPath ->
     |> HtmlResponse HttpOK
     |> Task.ok
 
-eventsMonthSection : List EventDb, Str -> Html.Node
+monthWithPaddedZeros : U128 -> Str
+monthWithPaddedZeros = \month ->
+    monthStr = Num.toStr month
+    if month < 10 then
+        "0$(monthStr)"
+    else
+        monthStr
+
+dayWithPaddedZeros : U128 -> Str
+dayWithPaddedZeros = monthWithPaddedZeros
+
+eventsMonthSection : List Event, Str -> Html.Node
 eventsMonthSection = \events, month ->
     eventListItem = \event ->
+        startsAt =
+            event.startsAt
+            |> Time.toDateTime cet
+            |> \dt ->
+                "$(dayWithPaddedZeros dt.day).$(monthWithPaddedZeros dt.month)"
+
         Html.div [class "event-list-item"] [
-            Html.div [class "event-list-item--head"] [Html.text "13.01"],
+            Html.div [class "event-list-item--head"] [Html.text startsAt],
             Html.div [class "event-list-item--body"] [
                 Html.a [Attribute.href "/events/$(event.slug)"] [Html.text event.title],
             ],
@@ -203,7 +220,7 @@ EventDb : {
     endsAt : U128,
 }
 
-publicEventBySlug : Str, Str -> Task EventDb _
+publicEventBySlug : Str, Str -> Task Event _
 publicEventBySlug = \slug, dbPath ->
     "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND slug=\"$(slug)\";"
     |> executeSql dbPath
@@ -212,13 +229,17 @@ publicEventBySlug = \slug, dbPath ->
             Err err -> Task.err (SqlParsingError err)
             Ok events ->
                 events
+                |> List.map eventFromDb
                 |> List.first
                 |> Task.fromResult
 
-publicEvents : Str -> Task (List EventDb) ServerError
+publicEvents : Str -> Task (List Event) ServerError
 publicEvents = \dbPath ->
     jsonLite dbPath
     |> queryDbOld "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1;" decodeEvent
+    |> Task.map \events ->
+        events
+        |> List.map eventFromDb
 
 decodeEvent : List U8 -> Result (List EventDb) [JsonDecodeError Str (List U8)]
 decodeEvent = \bytes ->
