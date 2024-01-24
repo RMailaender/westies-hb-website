@@ -352,40 +352,6 @@ expect
 
     actual == expected
 
-toDateTime : Posix, Zone -> DateTime
-toDateTime = \time, zone ->
-    seconds = toAdjustedSeconds time zone
-
-    minutes = Num.divTrunc seconds 60
-    hours = Num.divTrunc minutes 60
-    day = 1 + Num.divTrunc hours 24
-    month = 1
-    year = 1970
-    result = 
-        epochMillisToDateTimeHelp {
-            year,
-            month,
-            day,
-            hours,
-            minutes,
-            seconds,
-        }
-
-    result
-
-expect 
-    cet = customZone (After (60 * 60)) []
-    seconds = 1704045600
-    actual = 
-        posixFromSeconds 1704045600
-        |> toDateTime cet
-        |> dateTimeToPosix cet
-        |> posixToSeconds
-
-    actual == seconds
-
-
-
 toAdjustedSeconds : Posix, Zone -> U128
 toAdjustedSeconds = \time, @Zone { offset, eras } ->
     posixSeconds = posixToSeconds time
@@ -437,66 +403,91 @@ applyReversedOffsetToPosixSeconds = \posixSeconds, offset ->
         After seconds ->
             posixSeconds - seconds
 
-epochMillisToDateTimeHelp : DateTime -> DateTime
-epochMillisToDateTimeHelp = \current ->
-    countDaysInYear : U128
-    countDaysInYear = if isLeapYear current.year then 366 else 365
-    countDaysInMonth : U128
-    countDaysInMonth = daysInMonth current.month current.year
+toDateTime : Posix, Zone -> DateTime
+toDateTime = \time, zone ->
+    { year, month, seconds: remainingSeconds } =
+        toAdjustedSeconds time zone
+        |> yearsFromSeconds 1970
+        |> monthsFromSeconds 1
 
-    if current.day >= countDaysInYear then
-       
+    day =
+        remainingSeconds
+        |> Num.divTrunc 60
+        |> Num.divTrunc 60
+        |> Num.divTrunc 24
+        |> Num.add 1
 
-        epochMillisToDateTimeHelp {
-            year: current.year + 1,
-            month: current.month,
-            day: current.day - countDaysInYear,
-            hours: current.hours - (countDaysInYear * 24),
-            minutes: current.minutes - (countDaysInYear * 24 * 60),
-            seconds: current.seconds - (countDaysInYear * 24 * 60 * 60),
-        }
-    else if current.day >= countDaysInMonth then
+    hours =
+        remainingSeconds
+        |> Num.sub (daysToSeconds (day - 1))
+        |> Num.divTrunc 60
+        |> Num.divTrunc 60
 
-        epochMillisToDateTimeHelp {
-            year: current.year,
-            month: current.month + 1,
-            day: current.day - countDaysInMonth,
-            hours: current.hours - (countDaysInMonth * 24),
-            minutes: current.minutes - (countDaysInMonth * 24 * 60),
-            seconds: current.seconds - (countDaysInMonth * 24 * 60 * 60),
-        }
+    minutes =
+        remainingSeconds
+        |> Num.sub (daysToSeconds (day - 1))
+        |> Num.sub (hours * 60 * 60)
+        |> Num.divTrunc 60
+
+    seconds =
+        remainingSeconds
+        |> Num.sub (daysToSeconds (day - 1))
+        |> Num.sub (hours * 60 * 60)
+        |> Num.sub (minutes * 60)
+
+    {
+        year,
+        month,
+        day,
+        hours,
+        minutes,
+        seconds,
+    }
+
+expect
+    cet = customZone (After (60 * 60)) []
+    { year, month, day, hours, minutes, seconds } =
+        posixFromSeconds 1704045600
+        |> toDateTime cet
+
+    (year == 2023) && (month == 12) && (day == 31) && (hours == 19) && (minutes == 0) && (seconds == 0)
+
+yearsFromSeconds : U128, U128 -> { year : U128, seconds : U128 }
+yearsFromSeconds = \seconds, year ->
+    secondsInYear =
+        year
+        |> daysInYear
+        |> daysToSeconds
+
+    if secondsInYear < seconds then
+        yearsFromSeconds (seconds - secondsInYear) (year + 1)
     else
+        { year, seconds }
 
-        { current &
-            hours: current.hours % 24,
-            minutes: current.minutes % 60,
-            seconds: current.seconds % 60,
-        }
+expect
+    { year, seconds } = yearsFromSeconds 42 1970
 
-# test 1_700_005_179_053 ms past epoch
-# expect
-#     str = 1_700_005_179_053 |> posixFromMillis |> toIso8601Str
-#     str == "2023-11-14T23:39.39Z"
+    (year == 1970) && (seconds == 42)
 
-# # test 1000 ms past epoch
-# expect
-#     str = 1_000 |> posixFromMillis |> toIso8601Str
-#     str == "1970-01-01T00:00.01Z"
+expect
+    { year, seconds } = yearsFromSeconds 1704067255 1970
 
-# # test 1_000_000 ms past epoch
-# expect
-#     str = 1_000_000 |> posixFromMillis |> toIso8601Str
-#     str == "1970-01-01T00:16.40Z"
+    (year == 2024) && (seconds == 55)
 
-# # test 1_000_000_000 ms past epoch
-# expect
-#     str = 1_000_000_000 |> posixFromMillis |> toIso8601Str
-#     str == "1970-01-12T13:46.40Z"
+monthsFromSeconds : { year : U128, seconds : U128 }, U128 -> { year : U128, month : U128, seconds : U128 }
+monthsFromSeconds = \{ year, seconds }, month ->
+    secondsInMonth =
+        daysInMonth month year
+        |> daysToSeconds
 
-# # test 1_600_005_179_000 ms past epoch
-# expect
-#     str = 1_600_005_179_000 |> posixFromMillis |> toIso8601Str
-#     str == "2020-09-13T13:52.59Z"
+    if secondsInMonth < seconds then
+        monthsFromSeconds { year, seconds: seconds - secondsInMonth } (month + 1)
+    else
+        { year, month, seconds }
+
+expect
+    { year, month, seconds } = monthsFromSeconds { year: 1970, seconds: 7776055 } 1
+    (year == 1970) && (month == 4) && (seconds == 55)
 
 toWeekday : U128 -> Weekday
 toWeekday = \millis ->
