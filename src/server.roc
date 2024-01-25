@@ -56,13 +56,10 @@ main : Request -> Task Response []
 main = \req ->
     time <-
         Utc.now
-        |> Task.map Utc.toNanosSinceEpoch
-        |> Task.map Time.posixFromNanos
         |> Task.await
 
-    dt = Time.toDateTime time cet
-
-    {} <- Stdout.line "$(Time.displayDt dt) \(Http.methodToStr req.method) \(req.url)" |> Task.await
+    timeStr = Utc.toIso8601Str time
+    {} <- Stdout.line "$(timeStr) $(Http.methodToStr req.method) $(req.url)" |> Task.await
 
     dbPath <-
         Env.var "DB_PATH"
@@ -81,7 +78,7 @@ main = \req ->
             (Get, ["style.css"]) ->
                 Task.ok (CssResponse styleFile)
 
-            _ -> Task.err (UnknownRoute)
+            _ -> Task.err (UnknownRoute req.url)
 
     handlerResponse
     |> Task.onErr handleServerError
@@ -185,7 +182,7 @@ eventDetailPage = \dbPath, slug ->
             |> HtmlResponse HttpOK
             |> Task.ok
 
-        Err _ -> Task.err UnknownRoute
+        Err _ -> Task.err (UnknownRoute "events/$(slug)")
 
 # =================================================
 #   - Event
@@ -263,7 +260,7 @@ pageLayout = \{ title, content } ->
     Html.html [] [
         Html.head [] [
             Html.meta [Attribute.charset "utf-8"] [],
-            Html.link [Attribute.rel "stylesheet", Attribute.href "/public/style.css"] [],
+            Html.link [Attribute.rel "stylesheet", Attribute.href "/style.css"] [],
             Html.title [] [Html.text title],
 
         ],
@@ -353,7 +350,7 @@ queryDbOld = \@Sqlite { dbPath, mode }, query, decode ->
 ServerError : [
     DBCommandFailed Str Str,
     JsonDecodeError Str (List U8),
-    UnknownRoute,
+    UnknownRoute Str,
     CouldNotLoadCssError,
     EnvNotFound Str,
 ]
@@ -436,8 +433,8 @@ handleServerError = \error ->
             {} <- Stderr.line "Decode Error -> \(name):\n\(jsonStr)" |> Task.await
             errPage "Decode Error" "Could not decode events from DB." InternalServerError
 
-        UnknownRoute ->
-            {} <- Stderr.line "UnknownRoute" |> Task.await
+        UnknownRoute route ->
+            {} <- Stderr.line "|--> 404 UnknownRoute: $(route)" |> Task.await
             errPage "404" "UnknownRoute" NotFound
 
         CouldNotLoadCssError ->
