@@ -23,33 +23,6 @@ app "westies-hb-server"
     ]
     provides [main] to pf
 
-#  Step 1
-# - basic profiling with timestamps
-# - db initialization
-# - fill db with currently known events in Jan und Feb 24
-# - Render this list to index.html
-# - Imprint.html
-# - 404.html
-# - deploy this version
-
-#  Step 2
-# - Render detail pages for events
-# - link to detail pages from index
-# - deploy
-
-#
-# - admin api to update entrie via postman
-# - deploy
-
-#
-# Elm Admin Backend
-# deploy
-
-# [- add JWT to platform]
-# [- add sqlite3 to platform]
-# [- CSS builder]
-# - initDb should run once only. maybe add a 'init : {} -> Task initialData []' to the platform
-
 cet = Time.customZone (After (60 * 60)) []
 
 main : Request -> Task Response []
