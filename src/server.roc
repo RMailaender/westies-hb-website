@@ -9,6 +9,8 @@ app "westies-hb-server"
         pf.Stderr,
         pf.Task.{ Task },
         pf.Http.{ Request, Response },
+        pf.File,
+        pf.Path,
         pf.Utc,
         pf.Env,
         pf.Url.{ Url },
@@ -18,7 +20,7 @@ app "westies-hb-server"
         json.Core.{ json },
         Decode.{ DecodeResult },
         Inspect,
-        "style.css" as styleFile : List U8,
+        # "style.css" as styleFile : List U8,
         Time.{ TimeOffset },
     ]
     provides [main] to pf
@@ -49,7 +51,9 @@ main = \req ->
                 eventDetailPage dbPath slug
 
             (Get, ["style.css"]) ->
-                Task.ok (CssResponse styleFile)
+                File.readBytes (Path.fromStr "src/style.css")
+                |> Task.mapErr \_ -> FileIOError
+                |> Task.map CssResponse
 
             _ -> Task.err (UnknownRoute req.url)
 
@@ -312,6 +316,7 @@ ServerError : [
     UnknownRoute Str,
     EnvNotFound Str,
     SqlParsingError Str,
+    FileIOError,
 ]
 
 Status : [
@@ -396,6 +401,10 @@ handleServerError = \error ->
         EnvNotFound env ->
             {} <- Stderr.line "|--> Env not found: $(env)" |> Task.await
             errPage "Env not found" "Could not find env: $(env)" InternalServerError
+
+        FileIOError ->
+            {} <- Stderr.line "|--> FileIOError" |> Task.await
+            errPage "File io error" "Could not read file" InternalServerError
 
 jsonResponse : List U8, U16 -> Response
 jsonResponse = \bytes, status -> {
