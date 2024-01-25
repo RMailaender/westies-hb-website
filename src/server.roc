@@ -198,26 +198,24 @@ publicEventBySlug = \slug, dbPath ->
     |> executeSql dbPath
     |> Task.await \bytes ->
         when Decode.fromBytes bytes json is
-            Err err -> Task.err (SqlParsingError err)
+            Err _ -> Task.err (SqlParsingError "publicEventBySlug")
             Ok events ->
                 events
                 |> List.map eventFromDb
                 |> List.first
                 |> Task.fromResult
 
-publicEvents : Str -> Task (List Event) ServerError
+publicEvents : Str -> Task (List Event) _
 publicEvents = \dbPath ->
-    jsonLite dbPath
-    |> queryDbOld "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1;" decodeEvent
-    |> Task.map \events ->
-        events
-        |> List.map eventFromDb
-
-decodeEvent : List U8 -> Result (List EventDb) [JsonDecodeError Str (List U8)]
-decodeEvent = \bytes ->
-    when Decode.fromBytes bytes json is
-        Ok events -> Ok events
-        Err _ -> Err (JsonDecodeError "Events" bytes)
+    "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1;"
+    |> executeSql dbPath
+    |> Task.await \bytes ->
+        when Decode.fromBytes bytes json is
+            Err _ -> Task.err (SqlParsingError "publicEvents")
+            Ok events ->
+                events
+                |> List.map eventFromDb
+                |> Task.ok
 
 # =================================================
 #   - View Components
@@ -259,16 +257,7 @@ urlSegments = \url -> url |> Url.path |> Str.split "/" |> List.dropFirst 1
 
 # =================================================
 #   - Sqlite
-# =================================================
-Mode : [Json]
-Sqlite := {
-    dbPath : Str,
-    mode : Mode,
-}
-
-jsonLite : Str -> Sqlite
-jsonLite = \dbPath ->
-    @Sqlite { dbPath, mode: Json }
+# ================================================
 
 executeSql : Str, Str -> Task (List U8) _
 executeSql = \query, dbPath ->
@@ -288,32 +277,6 @@ executeSql = \query, dbPath ->
                     {} <- Stdout.line "executeSql Err: $(err) " |> Task.await
                     Task.err (DBCommandFailed dbPath err)
 
-queryDbOld : Sqlite, Str, (List U8 -> Result decoded [JsonDecodeError Str (List U8)]) -> Task decoded ServerError
-queryDbOld = \@Sqlite { dbPath, mode }, query, decode ->
-    modeArg =
-        when mode is
-            Json -> ".mode json"
-
-    bytes <-
-        Command.new "sqlite3"
-        |> Command.arg dbPath
-        |> Command.arg modeArg
-        |> Command.arg query
-        |> Command.output
-        |> Task.await \output ->
-            when output.status is
-                Ok {} ->
-                    Task.ok output.stdout
-
-                Err _ ->
-                    err = (Str.fromUtf8 output.stderr) |> Result.withDefault "shit"
-                    Task.err (DBCommandFailed dbPath err)
-        |> Task.await
-
-    when decode bytes is
-        Ok decoded -> Task.ok decoded
-        Err (JsonDecodeError name b) -> Task.err (JsonDecodeError name b)
-
 # ==================================================================================================
 
 # =================================================
@@ -322,10 +285,9 @@ queryDbOld = \@Sqlite { dbPath, mode }, query, decode ->
 
 ServerError : [
     DBCommandFailed Str Str,
-    JsonDecodeError Str (List U8),
     UnknownRoute Str,
-    CouldNotLoadCssError,
     EnvNotFound Str,
+    SqlParsingError Str,
 ]
 
 Status : [
@@ -396,27 +358,20 @@ handleServerError = \error ->
 
     when error is
         DBCommandFailed dbPath _ ->
-            {} <- Stderr.line "DB Error: \(dbPath)" |> Task.await
+            {} <- Stderr.line "|--> DB Error: $(dbPath)" |> Task.await
             errPage "DB Error" "Could not access DB." InternalServerError
 
-        JsonDecodeError name bytes ->
-            jsonStr =
-                (Str.fromUtf8 bytes)
-                |> Result.withDefault "UTF8 error"
-            {} <- Stderr.line "Decode Error -> \(name):\n\(jsonStr)" |> Task.await
-            errPage "Decode Error" "Could not decode events from DB." InternalServerError
+        SqlParsingError s ->
+            {} <- Stderr.line "|--> SqlParsingError: $(s)" |> Task.await
+            errPage "DB Error" "Could not access DB." InternalServerError
 
         UnknownRoute route ->
             {} <- Stderr.line "|--> 404 UnknownRoute: $(route)" |> Task.await
             errPage "404" "UnknownRoute" NotFound
 
-        CouldNotLoadCssError ->
-            {} <- Stderr.line "CouldNotLoadCssError" |> Task.await
-            Task.ok (TextResponse "CouldNotLoadCssError" InternalServerError)
-
         EnvNotFound env ->
-            {} <- Stderr.line "Env not found: \(env)" |> Task.await
-            errPage "Env not found" "Could not find env: \(env)" InternalServerError
+            {} <- Stderr.line "|--> Env not found: $(env)" |> Task.await
+            errPage "Env not found" "Could not find env: $(env)" InternalServerError
 
 jsonResponse : List U8, U16 -> Response
 jsonResponse = \bytes, status -> {
