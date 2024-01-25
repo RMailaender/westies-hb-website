@@ -70,13 +70,25 @@ indexPage = \utc, dbPath ->
         |> publicEvents dbPath
         |> Task.await
 
-    pageLayout {
-        title: "Westies HB",
-        content: [
-            eventsMonthSection events "Januar",
-            eventsMonthSection events "Februar",
-        ],
-    }
+    events
+    |> List.walk (Dict.empty {}) \state, event ->
+        key =
+            event.startsAt
+            |> Time.toDateTime cet
+            |> \dt -> (dt.year * 10) + dt.month
+
+        state
+        |> Dict.update key \possibleValue ->
+            when possibleValue is
+                Missing -> Present [event]
+                Present lst ->
+                    lst
+                    |> List.append event
+                    |> Present
+    |> Dict.walk
+        []
+        \state, key, monthEvents -> state |> List.append (eventsMonthSection monthEvents (Num.toStr key))
+    |> \content -> pageLayout { title: "Westies HB", content }
     |> HtmlResponse HttpOK
     |> Task.ok
 
