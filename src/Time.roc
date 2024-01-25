@@ -4,20 +4,26 @@ interface Time
         Posix,
         Zone,
         TimeOffset,
+        Month,
+        Weekday,
+
+        monthToU128,
+        monthFromU128,
+
+        customZone,
+        utc,
 
         # conversion
-        dateTimeToPosix,
         posixFromMillis,
         posixFromNanos,
         posixFromSeconds,
-        toIso8601Str,
-        customZone,
         posixToNanos,
         posixToMillis,
         posixToSeconds,
         posixToMinutes,
+        dateTimeToPosix,
         toDateTime,
-
+        
         # compare functions
         compare,
         gt,
@@ -25,15 +31,16 @@ interface Time
         lt,
         gtEqMonth,
         sameMonth,
-
+        
         # math
         sub,
-
+        
         # display
         displayDt,
         toGermanMonth,
         toGermanMonthShort,
-        toGermanWeekday
+        toGermanWeekday,
+        toIso8601Str,
     ]
     imports [
     ]
@@ -49,10 +56,10 @@ TimeOffset : [
 
 Era : { start : U128, offset : TimeOffset }
 
-DateTime : { year : U128, month : U128, day : U128, hours : U128, minutes : U128, seconds : U128 }
+DateTime : { year : U128, month : Month, day : U128, hours : U128, minutes : U128, seconds : U128 }
 
 displayDt : DateTime -> Str
-displayDt = \dt -> "$(Num.toStr dt.day).$(Num.toStr dt.month).$(Num.toStr dt.year) :: $(Num.toStr dt.hours):$(Num.toStr dt.minutes):$(Num.toStr dt.seconds)"
+displayDt = \dt -> "$(Num.toStr dt.day).$(Num.toStr (monthToU128 dt.month)).$(Num.toStr dt.year) :: $(Num.toStr dt.hours):$(Num.toStr dt.minutes):$(Num.toStr dt.seconds)"
 
 eq : Posix, Posix -> Bool
 eq = \@Posix a, @Posix b ->
@@ -82,7 +89,7 @@ gtEqMonth = \x, reference, zone ->
 
     (xDt.year > refDt.year)
     ||
-    ((xDt.year == refDt.year) && (xDt.month >= refDt.month))
+    ((xDt.year == refDt.year) && (monthToU128 xDt.month >= monthToU128 refDt.month))
 
 expect
     cet = Time.customZone (After (60 * 60)) []
@@ -207,6 +214,8 @@ expect
     expected = 1738756_800
     actual == expected
 
+# TODO posixFirstOfMonth for Zone
+
 posixFromNanos : U128 -> Posix
 posixFromNanos = \nanos -> @Posix nanos
 
@@ -242,10 +251,13 @@ customZone : TimeOffset, List Era -> Zone
 customZone = \offset, eras ->
     @Zone { offset, eras }
 
+utc : Zone
+utc = Time.customZone (After (0)) []
+
 toIso8601Str : DateTime -> Str
 toIso8601Str = \{ year, month, day, hours, minutes, seconds } ->
     yearStr = yearWithPaddedZeros year
-    monthStr = monthWithPaddedZeros month
+    monthStr = monthWithPaddedZeros (monthToU128 month)
     dayStr = dayWithPaddedZeros day
     hourStr = hoursWithPaddedZeros hours
     minuteStr = minutesWithPaddedZeros minutes
@@ -350,7 +362,9 @@ dateTimeToPosix = \current, zone ->
         |> Num.add (daysToSeconds days)
 
     secondsCurrentYear =
-        List.range { start: At 1, end: Before current.month }
+        current.month
+        |> monthToU128
+        |> \ month -> List.range { start: At 1, end: Before month }
         |> List.map \month -> daysInMonth month current.year
         |> List.map daysToSeconds
         |> List.walk secondsCurrentMonth Num.add
@@ -364,9 +378,8 @@ dateTimeToPosix = \current, zone ->
 
 # 05/02/2025 17:55:55
 expect
-    utc = customZone (After 0) []
     actual =
-        { year: 2025, month: 2, day: 5, hours: 17, minutes: 55, seconds: 55 }
+        { year: 2025, month: Feb, day: 5, hours: 17, minutes: 55, seconds: 55 }
         |> dateTimeToPosix utc
         |> posixToSeconds
 
@@ -378,7 +391,7 @@ expect
 expect
     cet = customZone (After (60 * 60)) []
     actual =
-        { year: 2025, month: 2, day: 5, hours: 17, minutes: 55, seconds: 55 }
+        { year: 2025, month: Feb, day: 5, hours: 17, minutes: 55, seconds: 55 }
         |> dateTimeToPosix cet
         |> posixToSeconds
 
@@ -388,9 +401,8 @@ expect
 
 # 01/02/2024 17:55:55
 expect
-    utc = customZone (After 0) []
     actual =
-        { year: 2024, month: 2, day: 1, hours: 17, minutes: 55, seconds: 55 }
+        { year: 2024, month: Feb, day: 1, hours: 17, minutes: 55, seconds: 55 }
         |> dateTimeToPosix utc
         |> posixToSeconds
 
@@ -400,9 +412,8 @@ expect
 
 # 01/01/2024 00:00:00
 expect
-    utc = customZone (After 0) []
     actual =
-        { year: 2024, month: 1, day: 1, hours: 0, minutes: 0, seconds: 0 }
+        { year: 2024, month: Jan, day: 1, hours: 0, minutes: 0, seconds: 0 }
         |> dateTimeToPosix utc
         |> posixToSeconds
 
@@ -495,7 +506,7 @@ toDateTime = \time, zone ->
 
     {
         year,
-        month,
+        month: monthFromU128 month,
         day,
         hours,
         minutes,
@@ -508,7 +519,7 @@ expect
         posixFromSeconds 1704045600
         |> toDateTime cet
 
-    (year == 2023) && (month == 12) && (day == 31) && (hours == 19) && (minutes == 0) && (seconds == 0)
+    (year == 2023) && (month == Dec) && (day == 31) && (hours == 19) && (minutes == 0) && (seconds == 0)
 
 yearsFromSeconds : U128, U128 -> { year : U128, seconds : U128 }
 yearsFromSeconds = \seconds, year ->
@@ -547,11 +558,16 @@ expect
     { year, month, seconds } = monthsFromSeconds { year: 1970, seconds: 7776055 } 1
     (year == 1970) && (month == 4) && (seconds == 55)
 
-toWeekday : U128 -> Weekday
-toWeekday = \millis ->
-    minutes = divFloor millis 60_000
-    r = divFloor minutes (60 * 24)
-    when modBy 7 r is
+toWeekday : Posix, Zone -> Weekday
+toWeekday = \time, zone ->
+    days = 
+        time
+        |> toAdjustedSeconds zone
+        |> divFloor 60
+        |> divFloor (60 * 24)
+
+
+    when modBy 7 days is
         0 -> Thu
         1 -> Fri
         2 -> Sat
@@ -571,15 +587,15 @@ modBy = \modulus, x ->
         answer
 
 expect
-    day = 1705941640_000 |> toWeekday
+    day =  1705941640_000 |> posixFromMillis |> toWeekday utc
     day == Mon
 
 expect
-    day = 1705172400_000 |> toWeekday
+    day = 1705172400_000 |> posixFromMillis |> toWeekday utc
     day == Sat
 
 expect
-    day = 1706299200_000 |> toWeekday
+    day = 1706299200_000 |> posixFromMillis |> toWeekday utc
     day == Fri
 
 expect
@@ -622,6 +638,39 @@ Month : [
     Nov,
     Dec,
 ]
+
+monthFromU128 : U128 -> Month
+monthFromU128 = \month ->
+    when month is
+        1 -> Jan
+        2 -> Feb
+        3 -> Mar
+        4 -> Apr
+        5 -> May
+        6 -> Jun
+        7 -> Jul
+        8 -> Aug
+        9 -> Sep
+        10 -> Oct
+        11 -> Nov
+        12 -> Dec
+        _ -> crash "TODO: Month out of range"
+
+monthToU128 : Month -> U128
+monthToU128 = \month ->
+    when month is
+        Jan -> 1
+        Feb -> 2
+        Mar -> 3
+        Apr -> 4
+        May -> 5
+        Jun -> 6
+        Jul -> 7
+        Aug -> 8
+        Sep -> 9
+        Oct -> 10
+        Nov -> 11
+        Dec -> 12
 
 toGermanMonth : Month -> Str
 toGermanMonth = \month ->

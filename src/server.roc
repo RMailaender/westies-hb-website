@@ -72,10 +72,12 @@ indexPage = \utc, dbPath ->
 
     events
     |> List.walk (Dict.empty {}) \state, event ->
-        key =
+        dt =
             event.startsAt
             |> Time.toDateTime cet
-            |> \dt -> (dt.year * 10) + dt.month
+
+        key =
+            (dt.year * 10) + (Time.monthToU128 dt.month)
 
         state
         |> Dict.update key \possibleValue ->
@@ -112,7 +114,7 @@ eventsMonthSection = \events, month ->
             event.startsAt
             |> Time.toDateTime cet
             |> \dt ->
-                "$(dayWithPaddedZeros dt.day).$(monthWithPaddedZeros dt.month)"
+                "$(dayWithPaddedZeros dt.day).$(monthWithPaddedZeros (Time.monthToU128 dt.month))"
 
         Html.div [class "event-list-item"] [
             Html.div [class "event-list-item--head"] [Html.text startsAt],
