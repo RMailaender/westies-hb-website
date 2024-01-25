@@ -26,6 +26,9 @@ interface Time
         gtEqMonth,
         sameMonth,
 
+        # math
+        sub,
+
         # display
         displayDt,
         toGermanMonth,
@@ -159,6 +162,50 @@ millisPerSecond = 1_000
 secondsPerMinute = 60
 minutesPerHour = 60
 hoursPerDay = 24
+daysPerWeek = 7
+
+toSeconds : [ Seconds U128, Minutes U128, Hours U128, Days U128, Weeks U128] -> U128
+toSeconds = \value -> 
+    when value is 
+        Seconds seconds ->
+            seconds
+
+        Minutes minutes ->
+            minutes * secondsPerMinute
+
+        Hours hours ->
+            hours * minutesPerHour * secondsPerMinute
+
+        Days days ->
+            days * hoursPerDay * minutesPerHour * secondsPerMinute
+
+        Weeks weeks -> 
+            weeks * daysPerWeek * hoursPerDay * minutesPerHour * secondsPerMinute
+
+
+sub : Posix, [ Seconds U128, Minutes U128, Hours U128, Days U128, Weeks U128] -> Posix
+sub = \time, subtractBy -> 
+    time 
+    |> posixToSeconds
+    |> Num.sub (toSeconds subtractBy)
+    |> posixFromSeconds
+        
+expect 
+    actual = 1738778_400 |> posixFromSeconds |> sub (Seconds 50) |> posixToSeconds
+    expected = 1738778_350
+    actual == expected
+        
+expect 
+    actual = 1738778_400 |> posixFromSeconds |> sub (Minutes 4) |> posixToSeconds
+    # 4 min == 240 sec
+    expected = 1738778_160
+    actual == expected
+        
+expect 
+    actual = 1738778_400 |> posixFromSeconds |> sub (Hours 6) |> posixToSeconds
+    # 6 h == 21600 sec
+    expected = 1738756_800
+    actual == expected
 
 posixFromNanos : U128 -> Posix
 posixFromNanos = \nanos -> @Posix nanos

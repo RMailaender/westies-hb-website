@@ -42,7 +42,7 @@ main = \req ->
     handlerResponse =
         when (req.method, req.url |> Url.fromStr |> urlSegments) is
             (Get, [""]) | (Get, ["events"]) ->
-                indexPage dbPath
+                indexPage time dbPath
 
             (Get, ["events", slug]) ->
                 {} <- Stdout.line "hier" |> Task.await
@@ -60,10 +60,15 @@ main = \req ->
 # =================================================
 #   - Index && EventList
 # =================================================
-indexPage : Str -> HandlerResult
-indexPage = \dbPath ->
+indexPage : Utc.Utc, Str -> HandlerResult
+indexPage = \utc, dbPath ->
 
-    events <- publicEvents dbPath |> Task.await
+    events <-
+        utc
+        |> Utc.toNanosSinceEpoch
+        |> Time.posixFromNanos
+        |> publicEvents dbPath
+        |> Task.await
 
     pageLayout {
         title: "Westies HB",
@@ -205,9 +210,13 @@ publicEventBySlug = \slug, dbPath ->
                 |> List.first
                 |> Task.fromResult
 
-publicEvents : Str -> Task (List Event) _
-publicEvents = \dbPath ->
-    "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1;"
+publicEvents : Time.Posix, Str -> Task (List Event) _
+publicEvents = \today, dbPath ->
+    today
+    |> Time.sub (Days 1)
+    |> Time.posixToSeconds
+    |> Num.toStr
+    |> \timeStr -> "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND startsAt>=$(timeStr);"
     |> executeSql dbPath
     |> Task.await \bytes ->
         when Decode.fromBytes bytes json is
