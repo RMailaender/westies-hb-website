@@ -82,14 +82,15 @@ indexPage = \utc, dbPath ->
         state
         |> Dict.update key \possibleValue ->
             when possibleValue is
-                Missing -> Present [event]
-                Present lst ->
-                    lst
-                    |> List.append event
-                    |> Present
+                Missing ->
+                    title = "$(Time.toGermanMonth dt.month) $(Num.toStr dt.year)"
+                    Present (title, [event])
+
+                Present (title, lst) ->
+                    Present (title, List.append lst event)
     |> Dict.walk
         []
-        \state, key, monthEvents -> state |> List.append (eventsMonthSection monthEvents (Num.toStr key))
+        \state, _, (monthTitle, monthEvents) -> state |> List.append (eventsMonthSection monthEvents monthTitle)
     |> \content -> pageLayout { title: "Westies HB", content }
     |> HtmlResponse HttpOK
     |> Task.ok
