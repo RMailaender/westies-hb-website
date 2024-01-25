@@ -3,10 +3,11 @@ interface Time
         DateTime,
         Posix,
         Zone,
+        TimeOffset,
+
+        # conversion
         dateTimeToPosix,
         posixFromMillis,
-        sameMonth,
-        gtEqMonth,
         posixFromNanos,
         posixFromSeconds,
         toIso8601Str,
@@ -16,8 +17,20 @@ interface Time
         posixToSeconds,
         posixToMinutes,
         toDateTime,
-        TimeOffset,
+
+        # compare functions
+        compare,
+        gt,
+        eq,
+        lt,
+        gtEqMonth,
+        sameMonth,
+
+        # display
         displayDt,
+        toGermanMonth,
+        toGermanMonthShort,
+        toGermanWeekday
     ]
     imports [
     ]
@@ -68,41 +81,41 @@ gtEqMonth = \x, reference, zone ->
     ||
     ((xDt.year == refDt.year) && (xDt.month >= refDt.month))
 
-# expect
-#     cet = Time.customZone (After (60 * 60)) []
-#     # 2024-02-08
-#     x = posixFromSeconds 1707415200
-#     # 2024-02-20
-#     ref = posixFromSeconds 1708452000
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2024-02-08
+    x = posixFromSeconds 1707415200
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
 
-#     gtEqMonth x ref cet == Bool.true
+    gtEqMonth x ref cet == Bool.true
 
-# expect
-#     cet = Time.customZone (After (60 * 60)) []
-#     # 2025-01-06
-#     x = posixFromSeconds 1736186400
-#     # 2024-02-20
-#     ref = posixFromSeconds 1708452000
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2025-01-06
+    x = posixFromSeconds 1736186400
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
 
-#     gtEqMonth x ref cet == Bool.true
+    gtEqMonth x ref cet == Bool.true
 
-# expect
-#     cet = Time.customZone (After (60 * 60)) []
-#     # 2024-01-10
-#     x = posixFromSeconds 1704909600
-#     # 2024-02-20
-#     ref = posixFromSeconds 1708452000
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2024-01-10
+    x = posixFromSeconds 1704909600
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
 
-#     gtEqMonth x ref cet == Bool.false
+    gtEqMonth x ref cet == Bool.false
 
-# expect
-#     cet = Time.customZone (After (60 * 60)) []
-#     # 2023-03-02
-#     x = posixFromSeconds 1677780000
-#     # 2024-02-20
-#     ref = posixFromSeconds 1708452000
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2023-03-02
+    x = posixFromSeconds 1677780000
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
 
-#     gtEqMonth x ref cet == Bool.false
+    gtEqMonth x ref cet == Bool.false
 
 sameMonth : Posix, Posix, Zone -> Bool
 sameMonth = \x, reference, zone ->
@@ -112,41 +125,40 @@ sameMonth = \x, reference, zone ->
     ((xDt.year == refDt.year) && (xDt.month == refDt.month))
 
 # Same month
-# expect
-#     cet = Time.customZone (After (60 * 60)) []
-#     # 2024-02-08
-#     x = posixFromSeconds 1707415200
-#     # 2024-02-20
-#     ref = posixFromSeconds 1708452000
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2024-02-08
+    x = posixFromSeconds 1707415200
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
 
-#     sameMonth x ref cet == Bool.true
+    sameMonth x ref cet == Bool.true
 
-# # Some time before
-# expect
-#     cet = Time.customZone (After (60 * 60)) []
-#     # 2023-03-02
-#     x = posixFromSeconds 1677780000
-#     # 2024-02-20
-#     ref = posixFromSeconds 1708452000
+# Some time before
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2023-03-02
+    x = posixFromSeconds 1677780000
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
 
-#     sameMonth x ref cet == Bool.false
+    sameMonth x ref cet == Bool.false
 
-# # same month next year
-# expect
-#     cet = Time.customZone (After (60 * 60)) []
-#     # 2025-02-05
-#     x = posixFromSeconds 1738778400
-#     # 2024-02-20
-#     ref = posixFromSeconds 1708452000
+# same month next year
+expect
+    cet = Time.customZone (After (60 * 60)) []
+    # 2025-02-05
+    x = posixFromSeconds 1738778400
+    # 2024-02-20
+    ref = posixFromSeconds 1708452000
 
-#     sameMonth x ref cet == Bool.false
+    sameMonth x ref cet == Bool.false
 
 nanosPerMilli = 1_000_000
 millisPerSecond = 1_000
 secondsPerMinute = 60
 minutesPerHour = 60
 hoursPerDay = 24
-daysPerWeek = 7
 
 posixFromNanos : U128 -> Posix
 posixFromNanos = \nanos -> @Posix nanos
@@ -283,7 +295,6 @@ expect
 dateTimeToPosix : DateTime, Zone -> Posix
 dateTimeToPosix = \current, zone ->
     days = if current.day > 0 then current.day - 1 else 0
-    months = if current.month > 0 then current.month - 1 else 0
 
     secondsCurrentMonth =
         current.seconds
