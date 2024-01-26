@@ -95,6 +95,7 @@ indexPage = \utc, dbPath ->
     |> Dict.walk
         []
         \state, _, (monthTitle, monthEvents) -> state |> List.append (eventsMonthSection monthEvents monthTitle)
+    |> \content -> [Html.div [class "events-main"] content]
     |> \content -> pageLayout { title: "Westies HB", content }
     |> HtmlResponse HttpOK
     |> Task.ok
@@ -137,8 +138,8 @@ eventsMonthSection = \events, month ->
                 [] -> Html.text ""
                 lst ->
                     Html.div [class "events-month-group"] [
-                        Html.h3 [] [Html.text "In Bremen"],
-                        Html.div [class "event-list"] lst,
+                        Html.div [class "events-month-group-header"] [Html.h3 [] [Html.text "In Bremen"]],
+                        Html.div [class "events-month-group-event-list"] lst,
                     ]
     eventsOutsideHb =
         events
@@ -149,14 +150,16 @@ eventsMonthSection = \events, month ->
                 [] -> Html.text ""
                 lst ->
                     Html.div [class "events-month-group"] [
-                        Html.h3 [] [Html.text "Umzu"],
-                        Html.div [class "event-list"] lst,
+                        Html.div [class "events-month-group-header"] [Html.h3 [] [Html.text "Umzu"]],
+                        Html.div [class "events-month-group-event-list"] lst,
                     ]
 
     Html.section [class "events-month-section"] [
-        Html.h2 [] [Html.text month],
-        eventsInHb,
-        eventsOutsideHb,
+        Html.div [class "events-month-section-header"] [Html.h2 [] [Html.text month]],
+        Html.div [class "events-month-section-body"] [
+            eventsInHb,
+            eventsOutsideHb,
+        ],
     ]
 
 # =================================================
@@ -259,6 +262,7 @@ pageLayout = \{ title, content } ->
     Html.html [] [
         Html.head [] [
             Html.meta [Attribute.charset "utf-8"] [],
+            Html.meta [Attribute.name "viewport", Attribute.content "width=device-width"] [],
             Html.link [Attribute.rel "stylesheet", Attribute.href "/style.css"] [],
             Html.title [] [Html.text title],
 
