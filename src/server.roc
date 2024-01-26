@@ -22,6 +22,7 @@ app "westies-hb-server"
         Inspect,
         "style.css" as styleFile : List U8,
         Time.{ TimeOffset },
+        Event,
     ]
     provides [main] to pf
 
@@ -44,7 +45,7 @@ main = \req ->
     handlerResponse =
         when (req.method, req.url |> Url.fromStr |> urlSegments) is
             (Get, [""]) | (Get, ["events"]) ->
-                indexPage time dbPath
+                indexPage time
 
             (Get, ["events", slug]) ->
                 {} <- Stdout.line "hier" |> Task.await
@@ -65,17 +66,24 @@ main = \req ->
 # =================================================
 #   - Index && EventList
 # =================================================
-indexPage : Utc.Utc, Str -> HandlerResult
-indexPage = \utc, dbPath ->
+indexPage : Utc.Utc -> HandlerResult
+indexPage = \utc ->
 
-    events <-
+    # Event.events <-
+    # utc
+    # |> Utc.toNanosSinceEpoch
+    # |> Time.posixFromNanos
+    # |> publicEvents dbPath
+    # |> Task.await
+
+    yesterday =
         utc
         |> Utc.toNanosSinceEpoch
         |> Time.posixFromNanos
-        |> publicEvents dbPath
-        |> Task.await
+        |> Time.sub (Days 1)
 
-    events
+    Event.eventsData
+    |> List.keepIf \{ startsAt } -> Time.gt startsAt yesterday
     |> List.walk (Dict.empty {}) \state, event ->
         dt =
             event.startsAt
@@ -112,7 +120,7 @@ monthWithPaddedZeros = \month ->
 dayWithPaddedZeros : U128 -> Str
 dayWithPaddedZeros = monthWithPaddedZeros
 
-eventsMonthSection : List Event, Str -> Html.Node
+eventsMonthSection : List Event.Event, Str -> Html.Node
 eventsMonthSection = \events, month ->
 
     eventListItem = \event ->
@@ -169,7 +177,6 @@ eventsMonthSection = \events, month ->
 eventDetailPage : Str, Str -> HandlerResult
 eventDetailPage = \dbPath, slug ->
     event <- publicEventBySlug slug dbPath |> Task.attempt
-    {} <- Stdout.line "event from db $(Inspect.toStr event)" |> Task.await
 
     when event is
         Ok { title, description } ->
@@ -189,7 +196,7 @@ eventDetailPage = \dbPath, slug ->
 #   - Event
 # =================================================
 
-Event : {
+EventStruct : {
     id : I32,
     slug : Str,
     title : Str,
@@ -199,7 +206,7 @@ Event : {
     endsAt : Time.Posix,
 }
 
-eventFromDb : EventDb -> Event
+eventFromDb : EventDb -> EventStruct
 eventFromDb = \{ id, slug, title, location, description, startsAt, endsAt } -> {
     id,
     slug,
@@ -220,7 +227,7 @@ EventDb : {
     endsAt : U128,
 }
 
-publicEventBySlug : Str, Str -> Task Event _
+publicEventBySlug : Str, Str -> Task EventStruct _
 publicEventBySlug = \slug, dbPath ->
     "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND slug=\"$(slug)\";"
     |> executeSql dbPath
@@ -233,21 +240,21 @@ publicEventBySlug = \slug, dbPath ->
                 |> List.first
                 |> Task.fromResult
 
-publicEvents : Time.Posix, Str -> Task (List Event) _
-publicEvents = \today, dbPath ->
-    today
-    |> Time.sub (Days 1)
-    |> Time.posixToSeconds
-    |> Num.toStr
-    |> \timeStr -> "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND startsAt>=$(timeStr);"
-    |> executeSql dbPath
-    |> Task.await \bytes ->
-        when Decode.fromBytes bytes json is
-            Err _ -> Task.err (SqlParsingError "publicEvents")
-            Ok events ->
-                events
-                |> List.map eventFromDb
-                |> Task.ok
+# publicEvents : Time.Posix, Str -> Task (List EventStruct) _
+# publicEvents = \today, dbPath ->
+#     today
+#     |> Time.sub (Days 1)
+#     |> Time.posixToSeconds
+#     |> Num.toStr
+#     |> \timeStr -> "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND startsAt>=$(timeStr);"
+#     |> executeSql dbPath
+#     |> Task.await \bytes ->
+#         when Decode.fromBytes bytes json is
+#             Err _ -> Task.err (SqlParsingError "publicEvents")
+#             Ok events ->
+#                 events
+#                 |> List.map eventFromDb
+#                 |> Task.ok
 
 # =================================================
 #   - View Components
