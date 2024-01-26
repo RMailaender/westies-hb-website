@@ -9,7 +9,7 @@ INSERT INTO events (
     endsAt,
     public
 ) VALUES (
-    "2024-01-03-west-coast-swing-party-mit-schnupperkurs-für-neueinsteiger",
+    "2024-01-03-west-coast-swing-party-mit-schnupperkurs-fuer-neueinsteiger",
     "West Coast Swing Party mit Schnupperkurs für Neueinsteiger",
     "Elbe-Werkstätten, Südring 38, 22303 Hamburg",
     "West Coast Swing Party mit Schnupperkurs für Neueinsteiger",
@@ -110,7 +110,7 @@ INSERT INTO events (
     endsAt,
     public
 ) VALUES (
-    "2024-02-07-west-coast-swing-party-mit-schnupperkurs-für-neueinsteiger",
+    "2024-02-07-west-coast-swing-party-mit-schnupperkurs-fuer-neueinsteiger",
     "West Coast Swing Party mit Schnupperkurs für Neueinsteiger",
     "Elbe-Werkstätten, Südring 38, 22303 Hamburg",
     "Monatliche Übungsparty immer am ersten Mittwoch im Monat.
