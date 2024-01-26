@@ -9,8 +9,8 @@ app "westies-hb-server"
         pf.Stderr,
         pf.Task.{ Task },
         pf.Http.{ Request, Response },
-        pf.File,
-        pf.Path,
+        # pf.File,
+        # pf.Path,
         pf.Utc,
         pf.Env,
         pf.Url.{ Url },
@@ -20,7 +20,7 @@ app "westies-hb-server"
         json.Core.{ json },
         Decode.{ DecodeResult },
         Inspect,
-        # "style.css" as styleFile : List U8,
+        "style.css" as styleFile : List U8,
         Time.{ TimeOffset },
     ]
     provides [main] to pf
@@ -51,10 +51,11 @@ main = \req ->
                 eventDetailPage dbPath slug
 
             (Get, ["style.css"]) ->
-                File.readBytes (Path.fromStr "src/style.css")
-                |> Task.mapErr \_ -> FileIOError
-                |> Task.map CssResponse
+                Task.ok (CssResponse styleFile)
 
+            # File.readBytes (Path.fromStr "src/style.css")
+            # |> Task.mapErr \_ -> FileIOError
+            # |> Task.map CssResponse
             _ -> Task.err (UnknownRoute req.url)
 
     handlerResponse
