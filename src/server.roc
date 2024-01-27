@@ -19,6 +19,7 @@ app "westies-hb-server"
         Decode.{ DecodeResult },
         Inspect,
         "style.css" as styleFile : List U8,
+        "events.json" as eventsJsonFile : List U8,
         Time.{ TimeOffset },
     ]
     provides [main] to pf
@@ -228,19 +229,31 @@ publicEventBySlug = \slug, dbPath ->
 
 publicEvents : Time.Posix, Str -> Task (List Event) _
 publicEvents = \today, dbPath ->
-    today
-    |> Time.sub (Days 1)
-    |> Time.posixToSeconds
-    |> Num.toStr
-    |> \timeStr -> "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND startsAt>=$(timeStr);"
-    |> executeSql dbPath
-    |> Task.await \bytes ->
-        when Decode.fromBytes bytes json is
-            Err _ -> Task.err (SqlParsingError "publicEvents")
-            Ok events ->
-                events
-                |> List.map eventFromDb
-                |> Task.ok
+    # today
+    # |> Time.sub (Days 1)
+    # |> Time.posixToSeconds
+    # |> Num.toStr
+    # |> \timeStr -> "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND startsAt>=$(timeStr);"
+    # |> executeSql dbPath
+    # |> Task.await \bytes ->
+    when Decode.fromBytes eventsJsonFile json is
+        Err err ->
+            when err is
+                Leftover bytes ->
+                    str = Str.fromUtf8 bytes |> Result.withDefault "nope"
+                    expect str == ""
+                    Task.err (SqlParsingError "publicEvents")
+
+                _ ->
+                    expect
+                        err == SQL
+
+                    Task.err (SqlParsingError "publicEvents")
+
+        Ok events ->
+            events
+            |> List.map eventFromDb
+            |> Task.ok
 
 # =================================================
 #   - View Components
