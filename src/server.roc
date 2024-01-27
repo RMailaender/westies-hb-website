@@ -1,31 +1,24 @@
 app "westies-hb-server"
     packages {
-        pf: "https://github.com/roc-lang/basic-webserver/releases/download/0.1/dCL3KsovvV-8A5D_W_0X_abynkcRcoAngsgF0xtvQsk.tar.br",
+        pf: "https://github.com/roc-lang/basic-cli/releases/download/0.8.1/x8URkvfyi9I0QhmVG98roKBUs_AZRkLFwFJVJ3942YA.tar.br",
         json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.6.0/hJySbEhJV026DlVCHXGOZNOeoOl7468y9F9Buhj0J18.tar.br",
     }
     imports [
         pf.Task.{ Task },
-        pf.Http.{ Request, Response },
+        pf.Stdout,
         json.Core.{ json },
         Decode,
         "events.json" as eventsJsonFile : List U8,
     ]
     provides [main] to pf
 
-main : Request -> Task Response []
-main = \_ ->
+main : Task {} _
+main =
 
     events
     |> List.map \event -> "- $(event.slug)"
     |> Str.joinWith "\n"
-    |> \str -> {
-        status: 200,
-        headers: [
-            { name: "Content-Type", value: Str.toUtf8 "text/html; charset=utf-8" },
-        ],
-        body: Str.toUtf8 str,
-    }
-    |> Task.ok
+    |> Stdout.line
 
 events : List Event
 events =
