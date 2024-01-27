@@ -9,8 +9,6 @@ app "westies-hb-server"
         pf.Stderr,
         pf.Task.{ Task },
         pf.Http.{ Request, Response },
-        # pf.File,
-        # pf.Path,
         pf.Utc,
         pf.Env,
         pf.Url.{ Url },
@@ -47,15 +45,11 @@ main = \req ->
                 indexPage time dbPath
 
             (Get, ["events", slug]) ->
-                {} <- Stdout.line "hier" |> Task.await
                 eventDetailPage dbPath slug
 
             (Get, ["style.css"]) ->
                 Task.ok (CssResponse styleFile)
 
-            # File.readBytes (Path.fromStr "src/style.css")
-            # |> Task.mapErr \_ -> FileIOError
-            # |> Task.map CssResponse
             _ -> Task.err (UnknownRoute req.url)
 
     handlerResponse
@@ -169,7 +163,6 @@ eventsMonthSection = \events, month ->
 eventDetailPage : Str, Str -> HandlerResult
 eventDetailPage = \dbPath, slug ->
     event <- publicEventBySlug slug dbPath |> Task.attempt
-    {} <- Stdout.line "event from db $(Inspect.toStr event)" |> Task.await
 
     when event is
         Ok { title, description } ->
@@ -259,7 +252,6 @@ pageLayout :
     }
     -> Html.Node
 pageLayout = \{ title, content } ->
-    # style = styleCss |> Str.fromUtf8 |> Result.withDefault ""
     Html.html [] [
         Html.head [] [
             Html.meta [Attribute.charset "utf-8"] [],
@@ -307,7 +299,6 @@ executeSql = \query, dbPath ->
 
                 Err _ ->
                     err = (Str.fromUtf8 output.stderr) |> Result.withDefault "shit"
-                    {} <- Stdout.line "executeSql Err: $(err) " |> Task.await
                     Task.err (DBCommandFailed dbPath err)
 
 # ==================================================================================================
