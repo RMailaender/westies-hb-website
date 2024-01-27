@@ -23,7 +23,8 @@ main =
 events : List Event
 events =
     eventsJsonFile
-    |> Decode.fromBytes json
+    |> Decode.fromBytesPartial json
+    |> \{ result } -> result
     |> Result.withDefault []
 
 Event : {
