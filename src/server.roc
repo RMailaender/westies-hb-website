@@ -7,50 +7,33 @@ app "westies-hb-server"
         pf.Task.{ Task },
         pf.Http.{ Request, Response },
         json.Core.{ json },
-        Decode.{ DecodeResult },
+        Decode,
         "events.json" as eventsJsonFile : List U8,
-        Time.{ TimeOffset },
     ]
     provides [main] to pf
 
 main : Request -> Task Response []
 main = \_ ->
 
+    events
+    |> List.map \event -> "- $(event.slug)"
+    |> Str.joinWith "\n"
+    |> \str -> {
+        status: 200,
+        headers: [
+            { name: "Content-Type", value: Str.toUtf8 "text/html; charset=utf-8" },
+        ],
+        body: Str.toUtf8 str,
+    }
+    |> Task.ok
+
+events : List Event
+events =
     eventsJsonFile
     |> Decode.fromBytes json
     |> Result.withDefault []
-    |> List.map eventFromDb
-    |> List.map \event -> "- $(event.slug)"
-    |> Str.joinWith "\n"
-    |> textResponse 200
-    |> Task.ok
-
-# =================================================
-#   - Event
-# =================================================
 
 Event : {
-    id : I32,
-    slug : Str,
-    title : Str,
-    location : Str,
-    description : Str,
-    startsAt : Time.Posix,
-    endsAt : Time.Posix,
-}
-
-eventFromDb : EventDb -> Event
-eventFromDb = \{ id, slug, title, location, description, startsAt, endsAt } -> {
-    id,
-    slug,
-    title,
-    location,
-    description,
-    startsAt: Time.posixFromSeconds startsAt,
-    endsAt: Time.posixFromSeconds endsAt,
-}
-
-EventDb : {
     id : I32,
     slug : Str,
     title : Str,
@@ -59,13 +42,3 @@ EventDb : {
     startsAt : U128,
     endsAt : U128,
 }
-
-textResponse : Str, U16 -> Response
-textResponse = \str, status -> {
-    status,
-    headers: [
-        { name: "Content-Type", value: Str.toUtf8 "text/html; charset=utf-8" },
-    ],
-    body: Str.toUtf8 str,
-}
-
