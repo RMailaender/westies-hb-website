@@ -38,7 +38,7 @@ main = \req ->
 
     dbPath <-
         Env.var "DB_PATH"
-        |> Task.onErr \_ -> crash "Unable to read DB_PATH"
+        |> Task.onErr \_ -> Task.ok "./build/data.db"
         |> Task.await
 
     handlerResponse =
