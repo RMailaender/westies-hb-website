@@ -7,7 +7,7 @@ app "westies-hb-server"
         pf.Task.{ Task },
         pf.Stdout,
         json.Core.{ json },
-        Decode,
+        Decode, 
         "events.json" as eventsJsonFile : List U8,
     ]
     provides [main] to pf
@@ -23,7 +23,8 @@ main =
 events : List Event
 events =
     eventsJsonFile
-    |> Decode.fromBytes json
+    |> Decode.fromBytesPartial json
+    |> \{ result } -> result
     |> Result.withDefault []
 
 Event : {
