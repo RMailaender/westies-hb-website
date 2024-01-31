@@ -1,3 +1,3 @@
-roc format ./src/server.roc
+# roc format ./src/server.roc
 
-DB_PATH=./data/data.db roc dev ./src/server.roc 
+DB_PATH=./data/data.db roc dev --prebuilt-platform --linker=legacy ./src/server.roc 

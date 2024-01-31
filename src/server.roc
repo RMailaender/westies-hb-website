@@ -1,8 +1,8 @@
 app "westies-hb-server"
     packages {
-        pf: "https://github.com/roc-lang/basic-webserver/releases/download/0.1/dCL3KsovvV-8A5D_W_0X_abynkcRcoAngsgF0xtvQsk.tar.br",
+        pf: "../../roc/basic-webserver/platform/main.roc",
         html: "https://github.com/Hasnep/roc-html/releases/download/v0.2.0/5fqQTpMYIZkigkDa2rfTc92wt-P_lsa76JVXb8Qb3ms.tar.br",
-        json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.6.0/hJySbEhJV026DlVCHXGOZNOeoOl7468y9F9Buhj0J18.tar.br",
+        json: "../../roc/roc-json/package/main.roc",
     }
     imports [
         pf.Stdout,
@@ -29,6 +29,7 @@ cet = Time.customZone (After (60 * 60)) []
 
 main : Request -> Task Response []
 main = \req ->
+
     time <-
         Utc.now
         |> Task.await
@@ -38,7 +39,7 @@ main = \req ->
 
     dbPath <-
         Env.var "DB_PATH"
-        |> Task.onErr \_ -> crash "Unable to read DB_PATH"
+        |> Task.onErr \_ -> Task.ok "./build/data.db"
         |> Task.await
 
     handlerResponse =
@@ -112,7 +113,7 @@ monthWithPaddedZeros = \month ->
 dayWithPaddedZeros : U128 -> Str
 dayWithPaddedZeros = monthWithPaddedZeros
 
-eventsMonthSection : List Event, Str -> Html.Node
+eventsMonthSection : List EventListEntry, Str -> Html.Node
 eventsMonthSection = \events, month ->
 
     eventListItem = \event ->
@@ -199,6 +200,13 @@ Event : {
     endsAt : Time.Posix,
 }
 
+EventListEntry : {
+    slug : Str,
+    startsAt : Time.Posix,
+    title : Str,
+    location : Str,
+}
+
 eventFromDb : EventDb -> Event
 eventFromDb = \{ id, slug, title, location, description, startsAt, endsAt } -> {
     id,
@@ -233,20 +241,28 @@ publicEventBySlug = \slug, dbPath ->
                 |> List.first
                 |> Task.fromResult
 
-publicEvents : Time.Posix, Str -> Task (List Event) _
+publicEvents : Time.Posix, Str -> Task (List EventListEntry) _
 publicEvents = \today, dbPath ->
+    toEntry : { slug : Str, title : Str, location : Str, startsAt : U128 } -> EventListEntry
+    toEntry = \{ slug, title, location, startsAt } -> {
+        slug,
+        title,
+        location,
+        startsAt: (startsAt |> Time.posixFromSeconds),
+    }
+
     today
     |> Time.sub (Days 1)
     |> Time.posixToSeconds
     |> Num.toStr
-    |> \timeStr -> "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND startsAt>=$(timeStr);"
+    |> \timeStr -> "SELECT slug, title, location, startsAt from events WHERE public=1 AND startsAt>=$(timeStr);"
     |> executeSql dbPath
     |> Task.await \bytes ->
         when Decode.fromBytes bytes json is
             Err _ -> Task.err (SqlParsingError "publicEvents")
             Ok events ->
                 events
-                |> List.map eventFromDb
+                |> List.map toEntry
                 |> Task.ok
 
 # =================================================
