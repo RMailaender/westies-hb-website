@@ -2,7 +2,7 @@ app "westies-hb-server"
     packages {
         pf: "../../roc/basic-webserver/platform/main.roc",
         html: "https://github.com/Hasnep/roc-html/releases/download/v0.2.0/5fqQTpMYIZkigkDa2rfTc92wt-P_lsa76JVXb8Qb3ms.tar.br",
-        json: "../../roc/roc-json/package/main.roc",
+        json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.6.1/-7UaQL9fbi0J3P6nS_qlxTdpDkOu_7CUm4MZzAN9ZUQ.tar.br",
     }
     imports [
         pf.Stdout,
