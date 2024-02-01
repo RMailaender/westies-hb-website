@@ -17,7 +17,6 @@ app "westies-hb-server"
         pf.Command,
         html.Html,
         html.Attribute.{ class },
-        json.Core.{ json },
         Decode.{ DecodeResult },
         Inspect,
         "style.css" as styleFile : List U8,
@@ -207,63 +206,67 @@ EventListEntry : {
     location : Str,
 }
 
-eventFromDb : EventDb -> Event
-eventFromDb = \{ id, slug, title, location, description, startsAt, endsAt } -> {
-    id,
-    slug,
-    title,
-    location,
-    description,
-    startsAt: Time.posixFromSeconds startsAt,
-    endsAt: Time.posixFromSeconds endsAt,
-}
-
-EventDb : {
-    id : I32,
-    slug : Str,
-    title : Str,
-    location : Str,
-    description : Str,
-    startsAt : U128,
-    endsAt : U128,
-}
-
 publicEventBySlug : Str, Str -> Task Event _
-publicEventBySlug = \slug, dbPath ->
-    "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND slug=\"$(slug)\";"
+publicEventBySlug = \searchSlug, dbPath ->
+    "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND slug=\"$(searchSlug)\";"
     |> executeSql dbPath
-    |> Task.await \bytes ->
-        when Decode.fromBytes bytes json is
-            Err _ -> Task.err (SqlParsingError "publicEventBySlug")
-            Ok events ->
-                events
-                |> List.map eventFromDb
-                |> List.first
-                |> Task.fromResult
+    |> Task.await \rowStrings ->
+        result =
+            when rowStrings is
+                [row] ->
+                    when row |> Str.split "|" is
+                        [idField, slug, title, location, description, startsAtField, endsAtField] ->
+                            startsAt <-
+                                startsAtField
+                                |> Str.toU128
+                                |> Result.map Time.posixFromSeconds
+                                |> Result.try
+
+                            endsAt <-
+                                endsAtField
+                                |> Str.toU128
+                                |> Result.map Time.posixFromSeconds
+                                |> Result.try
+
+                            id <-
+                                idField
+                                |> Str.toI32
+                                |> Result.map
+
+                            { id, slug, title, location, description, startsAt, endsAt }
+
+                        _ -> crash "Not enough Fields"
+
+                _ -> crash "expected only on event for slug: $(searchSlug)"
+
+        when result is
+            Ok event -> Task.ok event
+            Err _ -> crash "failed to decode publicEventBySlug"
 
 publicEvents : Time.Posix, Str -> Task (List EventListEntry) _
 publicEvents = \today, dbPath ->
-    toEntry : { slug : Str, title : Str, location : Str, startsAt : U128 } -> EventListEntry
-    toEntry = \{ slug, title, location, startsAt } -> {
-        slug,
-        title,
-        location,
-        startsAt: (startsAt |> Time.posixFromSeconds),
-    }
-
     today
     |> Time.sub (Days 1)
     |> Time.posixToSeconds
     |> Num.toStr
     |> \timeStr -> "SELECT slug, title, location, startsAt from events WHERE public=1 AND startsAt>=$(timeStr);"
     |> executeSql dbPath
-    |> Task.await \bytes ->
-        when Decode.fromBytes bytes json is
-            Err _ -> Task.err (SqlParsingError "publicEvents")
-            Ok events ->
-                events
-                |> List.map toEntry
-                |> Task.ok
+    |> Task.await \rowStrings ->
+        rowStrings
+        |> List.keepOks \row ->
+            row
+            |> Str.split "|"
+            |> \fields ->
+                when fields is
+                    [slug, title, location, startsAtField] ->
+                        startsAtField
+                        |> Str.toU128
+                        |> Result.map Time.posixFromSeconds
+                        |> Result.map \startsAt ->
+                            { slug, title, location, startsAt }
+
+                    _ -> Err (SqlParsingError "wrong field count")
+        |> Task.ok
 
 # =================================================
 #   - View Components
@@ -308,23 +311,27 @@ urlSegments = \url -> url |> Url.path |> Str.split "/" |> List.dropFirst 1
 #   - Sqlite
 # ================================================
 
-executeSql : Str, Str -> Task (List U8) _
+executeSql : Str, Str -> Task (List Str) _
 executeSql = \query, dbPath ->
     Command.new "sqlite3"
-    |> Command.arg dbPath
-    |> Command.arg ".mode json"
+    |> Command.arg dbPath # |> Command.arg ".mode json"
     |> Command.arg query
     |> Command.output
     |> Task.await
         \output ->
             when output.status is
                 Ok {} ->
-                    Task.ok output.stdout
+                    when Str.fromUtf8 output.stdout is
+                        Ok str ->
+                            str
+                            |> Str.split "\n"
+                            |> Task.ok
+
+                        Err _ -> crash "Unable to parse bytes received from sqlite3 to Str"
 
                 Err _ ->
-                    err = (Str.fromUtf8 output.stderr) |> Result.withDefault "shit"
-                    {} <- Stdout.line "executeSql Err: $(err) " |> Task.await
-                    Task.err (DBCommandFailed dbPath err)
+                    err = (Str.fromUtf8 output.stderr) |> Result.withDefault "Unable to decode error bytes"
+                    crash "Received an error from Sqlite3: $(err)"
 
 # ==================================================================================================
 
