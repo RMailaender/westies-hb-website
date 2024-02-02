@@ -69,6 +69,7 @@ indexPage = \utc, dbPath ->
     events <-
         utc
         |> Utc.toNanosSinceEpoch
+        |> Num.toU128
         |> Time.posixFromNanos
         |> publicEvents dbPath
         |> Task.await
