@@ -2,7 +2,6 @@ app "westies-hb-server"
     packages {
         pf: "../../roc/basic-webserver/platform/main.roc",
         html: "https://github.com/Hasnep/roc-html/releases/download/v0.2.0/5fqQTpMYIZkigkDa2rfTc92wt-P_lsa76JVXb8Qb3ms.tar.br",
-        json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.6.1/-7UaQL9fbi0J3P6nS_qlxTdpDkOu_7CUm4MZzAN9ZUQ.tar.br",
     }
     imports [
         pf.Stdout,
@@ -17,7 +16,6 @@ app "westies-hb-server"
         pf.Command,
         html.Html,
         html.Attribute.{ class },
-        Decode.{ DecodeResult },
         Inspect,
         "style.css" as styleFile : List U8,
         Time.{ TimeOffset },
@@ -112,6 +110,13 @@ monthWithPaddedZeros = \month ->
 dayWithPaddedZeros : U128 -> Str
 dayWithPaddedZeros = monthWithPaddedZeros
 
+EventListEntry : {
+    slug : Str,
+    startsAt : Time.Posix,
+    title : Str,
+    location : Str,
+}
+
 eventsMonthSection : List EventListEntry, Str -> Html.Node
 eventsMonthSection = \events, month ->
 
@@ -163,86 +168,6 @@ eventsMonthSection = \events, month ->
         ],
     ]
 
-# =================================================
-#   - EventDetails
-# =================================================
-eventDetailPage : Str, Str -> HandlerResult
-eventDetailPage = \dbPath, slug ->
-    event <- publicEventBySlug slug dbPath |> Task.attempt
-    {} <- Stdout.line "event from db $(Inspect.toStr event)" |> Task.await
-
-    when event is
-        Ok { title, description } ->
-            pageLayout {
-                title: "Westies HB - \(title)",
-                content: [
-                    Html.h2 [] [Html.text title],
-                    Html.p [] [Html.text description],
-                ],
-            }
-            |> HtmlResponse HttpOK
-            |> Task.ok
-
-        Err _ -> Task.err (UnknownRoute "events/$(slug)")
-
-# =================================================
-#   - Event
-# =================================================
-
-Event : {
-    id : I32,
-    slug : Str,
-    title : Str,
-    location : Str,
-    description : Str,
-    startsAt : Time.Posix,
-    endsAt : Time.Posix,
-}
-
-EventListEntry : {
-    slug : Str,
-    startsAt : Time.Posix,
-    title : Str,
-    location : Str,
-}
-
-publicEventBySlug : Str, Str -> Task Event _
-publicEventBySlug = \searchSlug, dbPath ->
-    "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND slug=\"$(searchSlug)\";"
-    |> executeSql dbPath
-    |> Task.await \rowStrings ->
-        result =
-            when rowStrings is
-                [row] ->
-                    when row |> Str.split "|" is
-                        [idField, slug, title, location, description, startsAtField, endsAtField] ->
-                            startsAt <-
-                                startsAtField
-                                |> Str.toU128
-                                |> Result.map Time.posixFromSeconds
-                                |> Result.try
-
-                            endsAt <-
-                                endsAtField
-                                |> Str.toU128
-                                |> Result.map Time.posixFromSeconds
-                                |> Result.try
-
-                            id <-
-                                idField
-                                |> Str.toI32
-                                |> Result.map
-
-                            { id, slug, title, location, description, startsAt, endsAt }
-
-                        _ -> crash "Not enough Fields"
-
-                _ -> crash "expected only on event for slug: $(searchSlug)"
-
-        when result is
-            Ok event -> Task.ok event
-            Err _ -> crash "failed to decode publicEventBySlug"
-
 publicEvents : Time.Posix, Str -> Task (List EventListEntry) _
 publicEvents = \today, dbPath ->
     today
@@ -267,6 +192,78 @@ publicEvents = \today, dbPath ->
 
                     _ -> Err (SqlParsingError "wrong field count")
         |> Task.ok
+
+# =================================================
+#   - EventDetails
+# =================================================
+eventDetailPage : Str, Str -> HandlerResult
+eventDetailPage = \dbPath, slug ->
+    event <- publicEventBySlug slug dbPath |> Task.attempt
+    {} <- Stdout.line "event from db $(Inspect.toStr event)" |> Task.await
+
+    when event is
+        Ok { title, description } ->
+            pageLayout {
+                title: "Westies HB - \(title)",
+                content: [
+                    Html.h2 [] [Html.text title],
+                    Html.p [] [Html.text description],
+                ],
+            }
+            |> HtmlResponse HttpOK
+            |> Task.ok
+
+        Err _ -> Task.err (UnknownRoute "events/$(slug)")
+
+Event : {
+    id : I32,
+    slug : Str,
+    title : Str,
+    location : Str,
+    description : Str,
+    startsAt : Time.Posix,
+    endsAt : Time.Posix,
+}
+
+publicEventBySlug : Str, Str -> Task Event _
+publicEventBySlug = \searchSlug, dbPath ->
+    rowToEvent = \row ->
+        when row |> Str.split "|" is
+            [idField, slug, title, location, description, startsAtField, endsAtField] ->
+                startsAt <-
+                    startsAtField
+                    |> Str.toU128 # |> orElseCrash "Unable to decode startsAt: "
+                    |> Result.mapErr \_ -> SqlParsingError "Str to Num"
+                    |> Result.map Time.posixFromSeconds
+                    |> Result.try
+
+                endsAt <-
+                    endsAtField
+                    |> Str.toU128 # |> orElseCrash "Unable to decode endsAt: "
+                    |> Result.mapErr \_ -> SqlParsingError "Str to Num"
+                    |> Result.map Time.posixFromSeconds
+                    |> Result.try
+
+                id <-
+                    idField
+                    |> Str.toI32
+                    |> Result.mapErr \_ -> SqlParsingError "Str to Num"
+                    |> Result.try
+                # |> orElseCrash "Unable to decode id: "
+
+                Ok { id, slug, title, location, description, startsAt, endsAt }
+
+            _ ->
+                Err (SqlParsingError "Not enought Fields")
+
+    "SELECT id, slug, title, location, description, startsAt, endsAt from events WHERE public=1 AND slug=\"$(searchSlug)\";"
+    |> executeSql dbPath
+    |> Task.await \rowStrings ->
+        rowStrings
+        |> List.first
+        |> Result.mapErr \_ -> SqlParsingError "No Event found"
+        |> Result.try rowToEvent
+        |> Task.fromResult
 
 # =================================================
 #   - View Components
