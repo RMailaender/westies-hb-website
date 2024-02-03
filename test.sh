@@ -1,4 +1,1 @@
-src='./src/server.roc'
-
-# roc format $src
-roc test $src
+ls src/*.roc | entr roc test ./src/server.roc

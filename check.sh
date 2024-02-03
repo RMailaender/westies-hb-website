@@ -1,4 +1,3 @@
 
 
-roc format ./src/server.roc
-# roc check ./src/server.roc
+ls src/*.roc | entr -c roc check ./src/server.roc
